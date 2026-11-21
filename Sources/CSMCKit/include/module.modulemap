@@ -1,0 +1,4 @@
+module CSMCKit {
+    header "CSMCKit.h"
+    export *
+}

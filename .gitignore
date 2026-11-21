@@ -1,0 +1,6 @@
+.DS_Store
+.build/
+CoolCurve.app/
+MmMacManager.app/
+dist/
+_archive/
