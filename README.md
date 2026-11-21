@@ -4,6 +4,14 @@
 
 一个极简的原生 macOS 菜单栏温控与状态工具，专注于 **看状态（温度 / 功耗 / 内存压力 / 热源）** 与 **控风扇（4 档策略）**。零第三方依赖，要求 macOS 14+、Apple Silicon。
 
+> [!WARNING]
+> **个人项目，风险自负。**
+> - 只在 **MacBook Pro 14" M3（Mac15,3，单风扇）** 上测试过。其他机型的 SMC 传感器名可能不同，温度读数和风扇策略可能不准确。
+> - 首次开启风扇控制时会以管理员权限安装一个 **setuid root 的辅助程序**（`mm-smc-helper`），之后它可以直接写 SMC 改风扇转速。使用前请先阅读源码。
+> - 需要自行从源码编译；不提供签名或公证过的安装包，不保证维护，也不提供支持。
+>
+> *Personal project, use at your own risk: only tested on an M3 MacBook Pro 14", installs a setuid-root helper that writes to the SMC, build from source, no support.*
+
 ---
 
 ## 核心特性
@@ -80,3 +88,9 @@ scripts/
 ```
 
 > 构建脚本直接调用 Command Line Tools 的 `swiftc`，无 SwiftUI 宏插件依赖，因此视图内不使用 `@State`，界面状态统一由 `AppState` 管理。
+
+---
+
+## 许可证
+
+[MIT](LICENSE)：可自由使用、修改和分发，按原样提供，不附带任何担保。
