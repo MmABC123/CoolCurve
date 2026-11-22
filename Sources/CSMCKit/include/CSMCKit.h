@@ -79,6 +79,12 @@ kern_return_t csmc_write_key(
     const uint8_t *inBytes
 );
 
+/// Reads only the value bytes of a key whose size is already known (one SMC call instead of two).
+kern_return_t csmc_read_bytes(io_connect_t conn, const char *keyStr, uint32_t dataSize, uint8_t outBytes[32]);
+
+/// Decodes raw SMC bytes of type ui8, ui16, ui32, si8, si16, flt, sp78, fpe2, hex_ into a double.
+bool csmc_decode_double(uint32_t dataType, uint32_t dataSize, const uint8_t bytes[32], double *outValue);
+
 /// Reads a numeric SMC key and decodes ui8, ui16, ui32, si16, flt, sp78, fpe2 into a double.
 bool csmc_read_double(io_connect_t conn, const char *keyStr, double *outValue);
 

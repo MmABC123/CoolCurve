@@ -145,34 +145,34 @@ public final class SystemMonitorService: @unchecked Sendable {
     }
 
     /// Battery percentage, AC state, and total system load in Watts from `AppleSmartBattery` (no root needed).
-    public func samplePowerStatus(fallbackWatts: Double? = nil) -> PowerStatus {
+    /// Reads just the battery properties it needs (copying all of AppleSmartBattery's, which include large
+    /// nested dictionaries, every 2 seconds was wasted work). `fallbackWatts` is only called when needed.
+    public func samplePowerStatus(fallbackWatts: () -> Double? = { nil }) -> PowerStatus {
         let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSmartBattery"))
         guard service != 0 else {
-            return PowerStatus(hasBattery: false, batteryPercent: 0, isOnAC: true, isCharging: false, systemWatts: fallbackWatts)
+            return PowerStatus(hasBattery: false, batteryPercent: 0, isOnAC: true, isCharging: false, systemWatts: fallbackWatts())
         }
         defer { IOObjectRelease(service) }
 
-        var propsRef: Unmanaged<CFMutableDictionary>?
-        guard IORegistryEntryCreateCFProperties(service, &propsRef, kCFAllocatorDefault, 0) == KERN_SUCCESS,
-              let props = propsRef?.takeRetainedValue() as? [String: Any] else {
-            return PowerStatus(hasBattery: false, batteryPercent: 0, isOnAC: true, isCharging: false, systemWatts: fallbackWatts)
+        func prop(_ key: String) -> Any? {
+            IORegistryEntryCreateCFProperty(service, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue()
         }
 
-        let installed = (props["BatteryInstalled"] as? Bool) ?? true
-        let currentCap = (props["CurrentCapacity"] as? NSNumber)?.intValue ?? 0
-        let maxCap = max((props["MaxCapacity"] as? NSNumber)?.intValue ?? 100, 1)
+        let installed = (prop("BatteryInstalled") as? Bool) ?? true
+        let currentCap = (prop("CurrentCapacity") as? NSNumber)?.intValue ?? 0
+        let maxCap = max((prop("MaxCapacity") as? NSNumber)?.intValue ?? 100, 1)
         let percent = min(max(Int((Double(currentCap) / Double(maxCap) * 100.0).rounded()), 0), 100)
-        let externalConnected = (props["ExternalConnected"] as? Bool) ?? true
-        let isCharging = (props["IsCharging"] as? Bool) ?? false
+        let externalConnected = (prop("ExternalConnected") as? Bool) ?? true
+        let isCharging = (prop("IsCharging") as? Bool) ?? false
 
         var watts: Double?
-        if let telemetry = props["PowerTelemetryData"] as? [String: Any],
+        if let telemetry = prop("PowerTelemetryData") as? [String: Any],
            let systemLoadMW = (telemetry["SystemLoad"] as? NSNumber)?.doubleValue,
            systemLoadMW > 500 && systemLoadMW < 300_000 {
             watts = systemLoadMW / 1000.0
         } else if !externalConnected,
-                  let voltageMV = (props["Voltage"] as? NSNumber)?.doubleValue,
-                  let amperageMA = (props["InstantAmperage"] as? NSNumber)?.doubleValue {
+                  let voltageMV = (prop("Voltage") as? NSNumber)?.doubleValue,
+                  let amperageMA = (prop("InstantAmperage") as? NSNumber)?.doubleValue {
             let computed = abs(voltageMV * amperageMA) / 1_000_000.0
             if computed > 0.5 && computed < 300.0 {
                 watts = computed
@@ -184,7 +184,7 @@ public final class SystemMonitorService: @unchecked Sendable {
             batteryPercent: percent,
             isOnAC: externalConnected,
             isCharging: isCharging,
-            systemWatts: watts ?? fallbackWatts
+            systemWatts: watts ?? fallbackWatts()
         )
     }
 

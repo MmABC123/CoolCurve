@@ -211,3 +211,23 @@ struct ChassisFanController {
         )
     }
 }
+
+extension ChassisFanProfile {
+    static func forMode(_ mode: FanControlMode) -> ChassisFanProfile? {
+        switch mode {
+        case .cool: return .cool
+        case .chill: return .chill
+        case .auto, .manual: return nil
+        }
+    }
+
+    /// What this profile asks for at a given CPU temperature, ignoring the slower inputs (interior heat,
+    /// load, chassis trim). Used to draw the mode's curve; the live controller can sit above or below it.
+    func previewRatio(atCPU celsius: Double) -> Double {
+        let heat = cpuCurve(celsius)
+        let value = celsius >= ChassisFanController.hotCelsius
+            ? max(heat, ChassisFanController.hotCurve(celsius))
+            : min(heat, noiseCap)
+        return min(max(value, floor), 1)
+    }
+}

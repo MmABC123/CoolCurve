@@ -29,6 +29,10 @@ public enum StatusMessage: Equatable, Sendable {
 public final class AppState: ObservableObject {
     public static let shared = AppState()
 
+    /// Set before `shared` is first touched when rendering README screenshots (`--snapshot`): the app then
+    /// never writes to the fans and never saves preferences, so it can run beside the real instance.
+    public static var isSnapshotMode = false
+
     /// In manual/curve mode, hand control back to macOS once the hottest CPU sensor stays at or above this.
     public static let emergencyCelsius: Double = 95
     /// Consecutive samples (~6s) at or above `emergencyCelsius` before acting, so one-sample peak spikes
@@ -69,13 +73,13 @@ public final class AppState: ObservableObject {
     // MARK: Preferences
 
     @Published public var language: AppLanguage {
-        didSet { UserDefaults.standard.set(language.rawValue, forKey: DefaultsKey.language) }
+        didSet { if !Self.isSnapshotMode { UserDefaults.standard.set(language.rawValue, forKey: DefaultsKey.language) } }
     }
     @Published public var isWindowPinned: Bool {
-        didSet { UserDefaults.standard.set(isWindowPinned, forKey: DefaultsKey.windowPinned) }
+        didSet { if !Self.isSnapshotMode { UserDefaults.standard.set(isWindowPinned, forKey: DefaultsKey.windowPinned) } }
     }
     @Published public var menuBarDensity: MenuBarDensity {
-        didSet { UserDefaults.standard.set(menuBarDensity.rawValue, forKey: DefaultsKey.menuBarDensity) }
+        didSet { if !Self.isSnapshotMode { UserDefaults.standard.set(menuBarDensity.rawValue, forKey: DefaultsKey.menuBarDensity) } }
     }
     @Published public private(set) var launchAtLogin = false
 
@@ -112,6 +116,7 @@ public final class AppState: ObservableObject {
     private var lastSmartOutputPercent: Int?
     private var hotSampleCount = 0
     private var lastGPUReading: (celsius: Double, at: Date)?
+    private var isSamplingProcesses = false
     private var isEmergencyPaused = false
 
     private init() {
@@ -123,8 +128,8 @@ public final class AppState: ObservableObject {
         launchAtLogin = SMAppService.mainApp.status == .enabled
 
         refresh()
-        adoptCurrentFanState()
-        if fanMode == .auto,
+        if !Self.isSnapshotMode { adoptCurrentFanState() }
+        if !Self.isSnapshotMode, fanMode == .auto,
            let savedRaw = defaults.string(forKey: DefaultsKey.preferredCurveMode),
            let savedMode = FanControlMode(storedValue: savedRaw),
            savedMode.isCurveMode,
@@ -238,6 +243,12 @@ public final class AppState: ObservableObject {
         }
     }
 
+    /// Current CPU °C and fan position (0 = min RPM, 1 = max) for the dot on the curve chart.
+    public var curveDot: (celsius: Double, ratio: Double)? {
+        guard hasFans, thermal.cpuAverageCelsius > 0 else { return nil }
+        return (thermal.cpuAverageCelsius, currentFanRatio)
+    }
+
     /// Approximate RPM of the first fan at a given manual level.
     public func targetRPM(forLevel level: Double) -> Int? {
         guard let fan = thermal.fans.first else { return nil }
@@ -252,8 +263,17 @@ public final class AppState: ObservableObject {
         thermal = holdingGPUReading(fanService.readSnapshot())
         thermalLevel = monitor.sampleThermalLevel()
         gpuUsage = monitor.sampleGPUUsage()
-        power = monitor.samplePowerStatus(fallbackWatts: fanService.readSystemPowerWatts())
-        topProcesses = processSampler.sampleTopProcesses(limit: 3)
+        power = monitor.samplePowerStatus { [fanService] in fanService.readSystemPowerWatts() }
+        // Walking every process is only worth it while the heat-source row could show (see `heatSource`).
+        let wantsProcesses = isHeatSourceExpanded || cpuUsage >= 40
+            || thermal.cpuAverageCelsius >= 75 || thermalLevel >= .fair
+        if wantsProcesses {
+            topProcesses = processSampler.sampleTopProcesses(limit: 3)
+        } else if isSamplingProcesses {
+            topProcesses = []
+            processSampler.reset()
+        }
+        isSamplingProcesses = wantsProcesses
         if heatSource == nil && isHeatSourceExpanded {
             isHeatSourceExpanded = false
         }
@@ -461,7 +481,7 @@ public final class AppState: ObservableObject {
     }
 
     /// Where the first fan sits between min (0) and max (1) RPM right now; 0 when stopped.
-    private var currentFanRatio: Double {
+    var currentFanRatio: Double {
         guard let fan = thermal.fans.first, fan.maxRPM > fan.minRPM else { return 0 }
         return min(max((fan.currentRPM - fan.minRPM) / (fan.maxRPM - fan.minRPM), 0), 1)
     }
@@ -479,6 +499,12 @@ public final class AppState: ObservableObject {
         }
     }
 
+    /// Snapshot mode only: show `mode` in the UI without driving the fans.
+    func showModeForSnapshot(_ mode: FanControlMode) {
+        guard Self.isSnapshotMode else { return }
+        fanMode = mode
+    }
+
     public func authorize() {
         let result = fanService.authorizePrivilegedHelper()
         isSMCAuthorized = fanService.isHelperAuthorized()
@@ -492,6 +518,7 @@ public final class AppState: ObservableObject {
     /// SMC writes can block for ~1s on M3/M4 (Ftst unlock), so they run off the main thread, one at a time
     /// in issue order (see `FanControlService.submit`).
     private func runFanCommand(_ work: @escaping @Sendable (FanControlService) -> FanCommandResult) {
+        guard !Self.isSnapshotMode else { return }
         fanService.submit(work) { [weak self] result in
             // nil: a newer command superseded this one before it ran.
             guard case .failure(let error)? = result else { return }

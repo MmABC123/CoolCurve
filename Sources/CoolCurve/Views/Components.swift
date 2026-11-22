@@ -231,6 +231,15 @@ struct FanControlSection: View {
             } else {
                 fanModePicker(t: t)
 
+                FanCurveChart(
+                    theme: theme,
+                    mode: appState.fanMode,
+                    manualRatio: appState.fanSliderValue / 100,
+                    current: appState.curveDot,
+                    strings: t
+                )
+                .padding(.top, 2)
+
                 switch appState.fanMode {
                 case .auto:
                     Text(t.autoRule)
@@ -238,13 +247,9 @@ struct FanControlSection: View {
                         .foregroundStyle(theme.soft)
                 case .cool, .chill:
                     if let rule = appState.activeCurveRule {
-                        VStack(alignment: .leading, spacing: 6) {
-                            MmLinearMeter(theme: theme, ratio: appState.smartTargetRatio, segments: 12)
-                            Text(rule)
-                                .font(.system(size: 10.5, design: .monospaced))
-                                .foregroundStyle(theme.soft)
-                        }
-                        .padding(.top, 2)
+                        Text(rule)
+                            .font(.system(size: 10.5, design: .monospaced))
+                            .foregroundStyle(theme.soft)
                     }
                 case .manual:
                     MmSlider(theme: theme, value: $appState.fanSliderValue, in: 0...100, step: 1) { editing in

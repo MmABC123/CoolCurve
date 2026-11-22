@@ -128,15 +128,37 @@ kern_return_t csmc_write_key(
     return kIOReturnSuccess;
 }
 
+kern_return_t csmc_read_bytes(io_connect_t conn, const char *keyStr, uint32_t dataSize, uint8_t outBytes[32]) {
+    if (!conn || !keyStr || !outBytes) return kIOReturnBadArgument;
+
+    SMCKeyData_t inputStruct;
+    SMCKeyData_t outputStruct;
+    memset(&inputStruct, 0, sizeof(SMCKeyData_t));
+    memset(&outputStruct, 0, sizeof(SMCKeyData_t));
+    inputStruct.key = csmc_str_to_fourcc(keyStr);
+    inputStruct.keyInfo.dataSize = dataSize;
+    inputStruct.data8 = SMC_CMD_READ_BYTES;
+
+    kern_return_t kr = csmc_call(conn, &inputStruct, &outputStruct);
+    if (kr != kIOReturnSuccess || outputStruct.result != 0) {
+        return (kr != kIOReturnSuccess) ? kr : kIOReturnError;
+    }
+    memcpy(outBytes, outputStruct.bytes, (dataSize <= 32) ? dataSize : 32);
+    return kIOReturnSuccess;
+}
+
 bool csmc_read_double(io_connect_t conn, const char *keyStr, double *outValue) {
-    if (!outValue) return false;
     uint32_t dataType = 0;
     uint32_t dataSize = 0;
     uint8_t bytes[32] = {0};
-
     if (csmc_read_key(conn, keyStr, &dataType, &dataSize, bytes) != kIOReturnSuccess) {
         return false;
     }
+    return csmc_decode_double(dataType, dataSize, bytes, outValue);
+}
+
+bool csmc_decode_double(uint32_t dataType, uint32_t dataSize, const uint8_t bytes[32], double *outValue) {
+    if (!outValue) return false;
 
     uint32_t typeFlt  = csmc_str_to_fourcc("flt ");
     uint32_t typeFpe2 = csmc_str_to_fourcc("fpe2");

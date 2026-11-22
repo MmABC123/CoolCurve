@@ -77,6 +77,12 @@ public final class SMCClient: @unchecked Sendable {
 
     private let lock = NSLock()
     private var connection: io_connect_t = 0
+    /// Type and size per key, so each later read is one SMC call instead of two.
+    private var keyInfo: [String: (type: UInt32, size: UInt32)] = [:]
+    /// Keys this Mac's SMC says don't exist; never asked for again (sampling tries many model-specific names).
+    private var missingKeys: Set<String> = []
+    /// `kIOReturnError`, which `csmc_read_key` returns when the SMC reports a non-zero result (unknown key).
+    private static let smcKeyNotFound = kern_return_t(bitPattern: 0xE000_02BC)
 
     // Common Apple Silicon + Intel CPU temperature SMC keys
     private let cpuTempKeys: [String] = [
@@ -131,12 +137,34 @@ public final class SMCClient: @unchecked Sendable {
     public func readDouble(_ key: String) -> Double? {
         lock.lock()
         defer { lock.unlock() }
-        guard ensureConnected() else { return nil }
-        var val: Double = 0
-        if csmc_read_double(connection, key, &val) {
-            return val
+        guard !missingKeys.contains(key), ensureConnected() else { return nil }
+
+        let info: (type: UInt32, size: UInt32)
+        if let cached = keyInfo[key] {
+            info = cached
+        } else {
+            var type: UInt32 = 0
+            var size: UInt32 = 0
+            let kr = csmc_read_key(connection, key, &type, &size, nil)
+            guard kr == kIOReturnSuccess else {
+                // kIOReturnError (0xE00002BC) = the SMC answered "no such key"; anything else may be transient.
+                if kr == Self.smcKeyNotFound { missingKeys.insert(key) }
+                return nil
+            }
+            info = (type, size)
+            keyInfo[key] = info
         }
-        return nil
+
+        var bytes: (UInt64, UInt64, UInt64, UInt64) = (0, 0, 0, 0)
+        return withUnsafeMutableBytes(of: &bytes) { raw -> Double? in
+            let buffer = raw.baseAddress!.assumingMemoryBound(to: UInt8.self)
+            guard csmc_read_bytes(connection, key, info.size, buffer) == kIOReturnSuccess else {
+                keyInfo[key] = nil
+                return nil
+            }
+            var value: Double = 0
+            return csmc_decode_double(info.type, info.size, buffer, &value) ? value : nil
+        }
     }
 
     public func writeDouble(_ key: String, value: Double) -> Bool {
@@ -179,18 +207,17 @@ public final class SMCClient: @unchecked Sendable {
             }
         }
 
-        // 2. Fallback / supplement with IOHIDEventSystemClient thermal sensors (works across M1/M2/M3/M4)
-        var hidAvg: Double = 0
-        var hidMax: Double = 0
-        let hidCount = csmc_read_hid_temperatures(&hidAvg, &hidMax)
-        if hidCount > 0 {
-            if cpuTemps.isEmpty {
+        // 2. Fallback to IOHIDEventSystemClient thermal sensors only when no SMC CPU key answered. It is the
+        //    most expensive read here (a new client and ~40 sensors per call), and where SMC keys exist the
+        //    HID sensors (PMU dies) read 15–20°C lower, so they never changed the result.
+        if cpuTemps.isEmpty {
+            var hidAvg: Double = 0
+            var hidMax: Double = 0
+            if csmc_read_hid_temperatures(&hidAvg, &hidMax) > 0 {
                 cpuTemps.append(hidAvg)
                 if hidMax > hidAvg {
                     cpuTemps.append(hidMax)
                 }
-            } else if hidMax > (cpuTemps.max() ?? 0) {
-                cpuTemps.append(hidMax)
             }
         }
 

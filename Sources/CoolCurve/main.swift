@@ -213,6 +213,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 }
 
 let app = NSApplication.shared
-let delegate = MainActor.assumeIsolated { AppDelegate() }
-app.delegate = delegate
-app.run()
+let arguments = CommandLine.arguments
+if let index = arguments.firstIndex(of: "--snapshot"), index + 1 < arguments.count {
+    // Developer tool: `CoolCurve --snapshot <dir> [secondsOfHistory]` renders README images and exits.
+    let directory = URL(fileURLWithPath: arguments[index + 1])
+    let delay = (index + 2 < arguments.count ? Double(arguments[index + 2]) : nil) ?? 0
+    app.setActivationPolicy(.prohibited)
+    MainActor.assumeIsolated {
+        AppState.isSnapshotMode = true
+        SnapshotRenderer.run(outputDirectory: directory, delay: delay)
+    }
+    app.run()
+} else {
+    let delegate = MainActor.assumeIsolated { AppDelegate() }
+    app.delegate = delegate
+    app.run()
+}

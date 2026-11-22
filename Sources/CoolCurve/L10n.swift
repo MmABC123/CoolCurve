@@ -58,6 +58,7 @@ public struct Strings: Sendable {
     public let autoRule: String
     public let coolRule: String
     public let chillRule: String
+    public let curveMacOS: String
     public let targetRPM: @Sendable (Int) -> String
 
     // Window
@@ -117,6 +118,7 @@ public struct Strings: Sendable {
         autoRule: "Managed automatically by macOS",
         coolRule: "Always on · slow ramps · case ≤35°C",
         chillRule: "Always ≥20% · early ramps · case ≤33°C",
+        curveMacOS: "macOS decides",
         targetRPM: { "Target ≈\($0) rpm" },
         last5Minutes: "Last 5 min",
         temperature: "Temp",
@@ -170,6 +172,7 @@ public struct Strings: Sendable {
         autoRule: "由 macOS 原生温控自动调节",
         coolRule: "常驻低速 · 缓慢调速 · 机身 ≤35°C",
         chillRule: "常驻 ≥20% · 提前提速 · 机身 ≤33°C",
+        curveMacOS: "由 macOS 控制",
         targetRPM: { "目标 ≈\($0) rpm" },
         last5Minutes: "近 5 分钟",
         temperature: "温度",

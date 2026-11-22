@@ -34,6 +34,13 @@ public final class ProcessSampler: @unchecked Sendable {
         timebaseDenom = UInt64(max(info.denom, 1))
     }
 
+    /// Forgets the previous sample, so the next one only sets a baseline. Call when sampling pauses,
+    /// otherwise the first sample after a long gap would average CPU over the whole gap.
+    public func reset() {
+        previousCPUTime = [:]
+        previousTimestamp = 0
+    }
+
     public func sampleTopProcesses(limit: Int = 3) -> [HeatSource] {
         let now = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
 
