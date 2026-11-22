@@ -58,7 +58,7 @@ A tiny native macOS menu bar app for two things: **seeing what your Mac is doing
   - On battery: Manual hands back to macOS when you unplug; Cool/Chill pause while on battery (you can still select them) and resume when you plug in.
   - Quitting or killing the app hands the fan back to macOS. Fanless Macs (e.g. MacBook Air) get monitoring only.
 - **Glanceable first, details on demand**:
-  - Menu bar readout in **S / M / L** widths (notch-friendly, fixed width so it never jitters).
+  - Menu bar readout you pick yourself: any mix of CPU, memory, CPU/GPU temperature, fan speed, power and fan mode, with S / M / L presets and a live preview in the window. Fixed width so it never jitters, with a hint when it gets wide enough to hide behind the notch.
   - Click for a popover; right-click or `↗` for a pinnable window with **5-minute temperature / fan / throttling history**, **GPU busy %** and **whole-system power (W)**.
   - **Heat source**: hidden while the Mac is idle; when it's working, shows the busiest process, expandable to the top 3 with switch to / quit / force quit.
 - **Light**: samples every 2 s and only does the expensive work when it matters (no process scan while idle, SMC key lookups cached, HID sensors read only as a fallback). About 1–2% of one core with the window open.
@@ -137,13 +137,14 @@ Sources/
 ├── mm-smc-helper/           Root helper CLI: status / auto / set / ratio
 └── CoolCurve/               Menu bar app and main window
     ├── main.swift           Status item, popover and window lifecycle
+    ├── MenuBarReadout.swift Menu bar items, text formatting and fixed width
     ├── AppState.swift       Sampling loop, fan modes, safety nets, preferences
     ├── L10n.swift           English/Chinese strings
     ├── Snapshot.swift       `--snapshot`: renders the README images
     ├── Services/            FanCurveControllers (Cool/Chill profiles), FanControlService,
     │                        SystemMonitorService, ProcessSampler
     └── Views/               MenuBarPopoverView, MainWindowView, Components,
-                             FanCurveChart, MmDesignSystem
+                             FanCurveChart, MenuBarSettingsSection, MmDesignSystem
 scripts/
 ├── build_app.sh             Native build that produces CoolCurve.app
 ├── generate_icon.swift      Generates the full-size AppIcon.icns

@@ -58,7 +58,7 @@
   - 电池供电：手动档在拔电时交还系统；冷静/清凉在电池下暂停（可照常选择），接上电源自动恢复。
   - 退出或终止 App 时交还 macOS 原生温控；无风扇机型（如 MacBook Air）自动切换为纯监控模式。
 - **渐进式信息展示**：
-  - 菜单栏常驻读数，支持 **简 / 中 / 全** 三档宽度（适配刘海屏，固定宽度零抖动）。
+  - 菜单栏读数自由组合：CPU、内存、CPU/GPU 温度、风扇转速、功耗、风扇模式任意勾选，保留 简 / 中 / 全 快速预设，主窗口里实时预览；宽度固定零抖动，太宽时提示刘海屏可能挡住。
   - 左键弹窗快速查看与调节；右键或点 `↗` 打开可置顶主窗口，含 **近 5 分钟温度/风扇/降频曲线**、**GPU 使用率**与 **整机实时功耗（W）**。
   - **可交互发热源**：机器空闲时自动隐藏，发热时显示头号高耗进程，点击展开 Top 3，支持一键切换、退出或强退。
 - **轻量**：每 2 秒采样一次，只在需要时做耗时的事（闲置时不扫描进程、缓存 SMC 传感器信息、HID 传感器只作后备）。主窗口开着时约占单核 1–2%。
@@ -137,13 +137,14 @@ Sources/
 ├── mm-smc-helper/           root 辅助命令行：status / auto / set / ratio
 └── CoolCurve/               菜单栏与主窗口 App
     ├── main.swift           状态栏图标、弹窗与主窗口生命周期
+    ├── MenuBarReadout.swift 菜单栏显示项、文字格式与固定宽度
     ├── AppState.swift       采样循环、风扇策略、安全兜底、偏好持久化
     ├── L10n.swift           中/英文案表
     ├── Snapshot.swift       `--snapshot`：生成 README 图片
     ├── Services/            FanCurveControllers（冷静/清凉参数）、FanControlService、
     │                        SystemMonitorService、ProcessSampler
     └── Views/               MenuBarPopoverView、MainWindowView、Components、
-                             FanCurveChart、MmDesignSystem
+                             FanCurveChart、MenuBarSettingsSection、MmDesignSystem
 scripts/
 ├── build_app.sh             原生编译并生成 CoolCurve.app
 ├── generate_icon.swift      生成全尺寸 AppIcon.icns
