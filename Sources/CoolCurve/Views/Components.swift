@@ -236,7 +236,7 @@ struct FanControlSection: View {
                     Text(t.autoRule)
                         .font(.system(size: 10.5, design: .monospaced))
                         .foregroundStyle(theme.soft)
-                case .cool, .turbo:
+                case .cool, .chill:
                     if let rule = appState.activeCurveRule {
                         VStack(alignment: .leading, spacing: 6) {
                             MmLinearMeter(theme: theme, ratio: appState.smartTargetRatio, segments: 12)
@@ -278,7 +278,7 @@ struct FanControlSection: View {
             Rectangle().fill(theme.border).frame(width: 1, height: 18)
             modeSegment(t.cool, mode: .cool)
             Rectangle().fill(theme.border).frame(width: 1, height: 18)
-            modeSegment(t.turbo, mode: .turbo)
+            modeSegment(t.chill, mode: .chill)
             Rectangle().fill(theme.border).frame(width: 1, height: 18)
             modeSegment(t.manual, mode: .manual)
         }

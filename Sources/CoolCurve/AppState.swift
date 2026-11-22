@@ -37,6 +37,9 @@ public final class AppState: ObservableObject {
     /// A curve mode paused by the emergency takes the fans back once the hottest sensor drops below this.
     public static let emergencyResumeCelsius: Double = 85
     public static let sampleInterval: TimeInterval = 2
+    /// GPU sensors can briefly report a placeholder while the GPU idles; keep showing the last real
+    /// reading for this long before falling back to "--".
+    public static let gpuReadingHold: TimeInterval = 10
     /// 5 minutes of samples for the window's history chart.
     public static let historyCapacity = 150
 
@@ -99,8 +102,8 @@ public final class AppState: ObservableObject {
     private let processSampler = ProcessSampler()
     private var timer: Timer?
     private var wasOnAC: Bool?
-    private var quietController = QuietFanController()
-    private var turboController = TurboFanController()
+    private var coolController = ChassisFanController(profile: .cool)
+    private var chillController = ChassisFanController(profile: .chill)
     /// Set when a curve mode starts or resumes, so its controller restarts from the fan's current speed.
     private var curveNeedsReset = true
     private var isSmartEngaged = false
@@ -108,6 +111,7 @@ public final class AppState: ObservableObject {
     private var lastSmartWrittenPercent: Int?
     private var lastSmartOutputPercent: Int?
     private var hotSampleCount = 0
+    private var lastGPUReading: (celsius: Double, at: Date)?
     private var isEmergencyPaused = false
 
     private init() {
@@ -122,7 +126,7 @@ public final class AppState: ObservableObject {
         adoptCurrentFanState()
         if fanMode == .auto,
            let savedRaw = defaults.string(forKey: DefaultsKey.preferredCurveMode),
-           let savedMode = FanControlMode(rawValue: savedRaw),
+           let savedMode = FanControlMode(storedValue: savedRaw),
            savedMode.isCurveMode,
            isSMCAuthorized && hasFans {
             enableCurveMode(savedMode)
@@ -220,7 +224,7 @@ public final class AppState: ObservableObject {
         switch fanMode {
         case .auto: mode = t.auto
         case .cool: mode = t.cool
-        case .turbo: mode = t.turbo
+        case .chill: mode = t.chill
         case .manual: mode = t.manual
         }
         return averageFanRPM > 0 ? "\(mode) · \(averageFanRPM) rpm" : "\(mode) · \(t.stopped)"
@@ -229,7 +233,7 @@ public final class AppState: ObservableObject {
     public var activeCurveRule: String? {
         switch fanMode {
         case .cool: return t.coolRule
-        case .turbo: return t.turboRule
+        case .chill: return t.chillRule
         case .auto, .manual: return nil
         }
     }
@@ -245,7 +249,7 @@ public final class AppState: ObservableObject {
     public func refresh() {
         cpuUsage = monitor.sampleCPU()
         memoryPressure = monitor.sampleMemoryPressure()
-        thermal = fanService.readSnapshot()
+        thermal = holdingGPUReading(fanService.readSnapshot())
         thermalLevel = monitor.sampleThermalLevel()
         gpuUsage = monitor.sampleGPUUsage()
         power = monitor.samplePowerStatus(fallbackWatts: fanService.readSystemPowerWatts())
@@ -284,6 +288,29 @@ public final class AppState: ObservableObject {
         }
     }
 
+    /// Fills a missing GPU temperature with the last real one if it's recent enough.
+    private func holdingGPUReading(_ snapshot: ThermalSnapshot) -> ThermalSnapshot {
+        let now = Date()
+        if snapshot.gpuCelsius > 0 {
+            lastGPUReading = (snapshot.gpuCelsius, now)
+            return snapshot
+        }
+        guard let last = lastGPUReading, now.timeIntervalSince(last.at) <= Self.gpuReadingHold else {
+            return snapshot
+        }
+        return ThermalSnapshot(
+            cpuAverageCelsius: snapshot.cpuAverageCelsius,
+            cpuPeakCelsius: snapshot.cpuPeakCelsius,
+            cpuHotspotCelsius: snapshot.cpuHotspotCelsius,
+            gpuCelsius: last.celsius,
+            palmRestCelsius: snapshot.palmRestCelsius,
+            chassisCelsius: snapshot.chassisCelsius,
+            internalCelsius: snapshot.internalCelsius,
+            fans: snapshot.fans,
+            hasFtstKey: snapshot.hasFtstKey
+        )
+    }
+
     private func append<Value>(_ value: Value, to history: inout [Value]) {
         history.append(value)
         if history.count > Self.historyCapacity {
@@ -314,7 +341,7 @@ public final class AppState: ObservableObject {
         switch mode {
         case .auto:
             restoreAuto(clearPreference: true)
-        case .cool, .turbo:
+        case .cool, .chill:
             enableCurveMode(mode)
         case .manual:
             setManualLevel(manualFanLevel)
@@ -348,7 +375,7 @@ public final class AppState: ObservableObject {
         lastSmartWrittenPercent = nil
         smartTargetRatio = 0
         status = nil
-        updateCurveFan(forceReleaseIfCool: wasActivelyControlled)
+        updateCurveFan(forceReleaseWhenPaused: wasActivelyControlled)
     }
 
     public func setManualLevel(_ level: Double) {
@@ -369,8 +396,8 @@ public final class AppState: ObservableObject {
         runFanCommand { $0.setAllFansRatio(ratio) }
     }
 
-    /// Runs one step of the active curve mode: `cool` (QuietFanController) or `turbo` (TurboFanController).
-    private func updateCurveFan(forceReleaseIfCool: Bool = false) {
+    /// Runs one step of the active curve mode (`cool` or `chill`, both ChassisFanController).
+    private func updateCurveFan(forceReleaseWhenPaused: Bool = false) {
         guard hasFans, isSMCAuthorized, fanMode.isCurveMode else { return }
 
         let hottest = max(thermal.cpuPeakCelsius, thermal.cpuHotspotCelsius)
@@ -389,7 +416,7 @@ public final class AppState: ObservableObject {
                 status = .batteryPaused
             }
             curveNeedsReset = true
-            releaseCurve(force: forceReleaseIfCool)
+            releaseCurve(force: forceReleaseWhenPaused)
             return
         }
         if status == .batteryPaused { status = nil }
@@ -397,38 +424,33 @@ public final class AppState: ObservableObject {
         if curveNeedsReset {
             curveNeedsReset = false
             let start = currentFanRatio
-            quietController.reset(startingAt: start)
-            turboController.reset(startingAt: start)
+            coolController.reset(startingAt: start)
+            chillController.reset(startingAt: start)
         }
 
         let inputs = FanControlInputs(
             cpuAverage: thermal.cpuAverageCelsius,
             cpuPeak: thermal.cpuPeakCelsius,
+            cpuHotspot: thermal.cpuHotspotCelsius,
             interior: thermal.internalCelsius,
             chassis: thermal.chassisCelsius,
             cpuUsage: cpuUsage,
             gpuUsage: gpuUsage ?? 0,
-            isWarm: thermalLevel >= .fair,
             isThrottling: thermalLevel >= .serious,
             interval: Self.sampleInterval
         )
-        let output: Double?
+        let ratio: Double
         switch fanMode {
-        case .cool: output = quietController.step(inputs)
-        case .turbo: output = turboController.step(inputs)
+        case .cool: ratio = coolController.step(inputs)
+        case .chill: ratio = chillController.step(inputs)
         case .auto, .manual: return
-        }
-
-        guard let ratio = output else {
-            releaseCurve(force: forceReleaseIfCool)
-            return
         }
         isSmartEngaged = true
         smartTargetRatio = ratio
 
         // Skip SMC writes for tiny moves while ramping, but always land on the value once it settles.
         let percent = Int((ratio * 100).rounded())
-        let minStep = fanMode == .cool ? 2 : 3
+        let minStep = 2
         let settled = percent == lastSmartOutputPercent
         lastSmartOutputPercent = percent
         if let last = lastSmartWrittenPercent, abs(percent - last) < minStep && !(settled && percent != last) {

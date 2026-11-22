@@ -6,11 +6,17 @@ import SMCKit
 public enum FanControlMode: String, Sendable, Equatable {
     case auto
     case cool
-    case turbo
+    /// Cooler case than `cool`, at the cost of more fan noise. Replaced the old "turbo" mode.
+    case chill
     case manual
 
     public var isCurveMode: Bool {
-        self == .cool || self == .turbo
+        self == .cool || self == .chill
+    }
+
+    /// Reads a saved mode, mapping the retired "turbo" to `chill`.
+    public init?(storedValue: String) {
+        self.init(rawValue: storedValue == "turbo" ? FanControlMode.chill.rawValue : storedValue)
     }
 }
 

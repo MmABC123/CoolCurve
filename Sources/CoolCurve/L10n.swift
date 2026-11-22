@@ -47,7 +47,7 @@ public struct Strings: Sendable {
     public let fan: String
     public let auto: String
     public let cool: String
-    public let turbo: String
+    public let chill: String
     public let manual: String
     public let min: String
     public let max: String
@@ -57,7 +57,7 @@ public struct Strings: Sendable {
     public let unlockHint: String
     public let autoRule: String
     public let coolRule: String
-    public let turboRule: String
+    public let chillRule: String
     public let targetRPM: @Sendable (Int) -> String
 
     // Window
@@ -106,7 +106,7 @@ public struct Strings: Sendable {
         fan: "Fan",
         auto: "Auto",
         cool: "Cool",
-        turbo: "Turbo",
+        chill: "Chill",
         manual: "Manual",
         min: "Min",
         max: "Max",
@@ -116,7 +116,7 @@ public struct Strings: Sendable {
         unlockHint: "Asks for your administrator password once",
         autoRule: "Managed automatically by macOS",
         coolRule: "Always on · slow ramps · case ≤35°C",
-        turboRule: "58°C or busy → instant ramp · 88°C full",
+        chillRule: "Always ≥20% · early ramps · case ≤33°C",
         targetRPM: { "Target ≈\($0) rpm" },
         last5Minutes: "Last 5 min",
         temperature: "Temp",
@@ -159,7 +159,7 @@ public struct Strings: Sendable {
         fan: "风扇",
         auto: "原厂",
         cool: "冷静",
-        turbo: "速冷",
+        chill: "清凉",
         manual: "手动",
         min: "最低",
         max: "最大",
@@ -169,7 +169,7 @@ public struct Strings: Sendable {
         unlockHint: "只需输入一次管理员密码",
         autoRule: "由 macOS 原生温控自动调节",
         coolRule: "常驻低速 · 缓慢调速 · 机身 ≤35°C",
-        turboRule: "58°C 或高负载即提速 · 88°C 满转",
+        chillRule: "常驻 ≥20% · 提前提速 · 机身 ≤33°C",
         targetRPM: { "目标 ≈\($0) rpm" },
         last5Minutes: "近 5 分钟",
         temperature: "温度",

@@ -4,14 +4,14 @@ import Foundation
 struct FanControlInputs {
     var cpuAverage: Double
     var cpuPeak: Double
+    /// Hottest-core aggregate (`TCMz`); spiky, so only used smoothed.
+    var cpuHotspot: Double
     /// Interior heat near the heatsink (`TH0x`).
     var interior: Double
     /// Hottest of palm rest / battery.
     var chassis: Double
     var cpuUsage: Double
     var gpuUsage: Double
-    /// macOS thermal state is `fair` or worse.
-    var isWarm: Bool
     /// macOS thermal state is `serious` or worse.
     var isThrottling: Bool
     /// Seconds since the previous sample.
@@ -51,6 +51,11 @@ private struct SlewLimiter {
     var output: Double = 0
     private var holdRemaining: TimeInterval = 0
 
+    /// Keeps the current output for at least `seconds` more before it may start falling.
+    mutating func hold(atLeast seconds: TimeInterval) {
+        holdRemaining = max(holdRemaining, seconds)
+    }
+
     /// Starts at `value` and holds it for `hold` seconds, so a mode switch doesn't immediately dip the fan.
     mutating func reset(to value: Double, hold: TimeInterval = 0) {
         output = min(max(value, 0), 1)
@@ -77,39 +82,96 @@ private struct SlewLimiter {
     }
 }
 
-/// Cool: keep the case from warming up, quietly. Always drives the fans (never hands back to macOS),
-/// never stops them, and changes speed slowly in both directions.
+/// How much noise a chassis-first mode trades for a cooler case.
+struct ChassisFanProfile {
+    /// Fan never goes below this (0 = hardware minimum RPM, still spinning).
+    let floor: Double
+    /// Target from a slowly smoothed CPU average.
+    let cpuCurve: LinearCurve
+    /// Target from interior heat (`TH0x`), which leads the chassis by a minute or two.
+    let internalCurve: LinearCurve
+    /// Feed-forward from smoothed CPU/GPU busy %: start moving heat before temperatures show it. nil = off.
+    let loadCurve: LinearCurve?
+    /// Palm rest / battery above this slowly adds speed, on top of the noise cap.
+    let chassisTarget: Double
+    /// Ceiling for the temperature-driven part until the shared high-temperature layer takes over.
+    let noiseCap: Double
+    let risePerSecond: Double
+    let fallPerSecond: Double
+    let holdBeforeFall: TimeInterval
+
+    /// Cool: quiet first. Hardware-minimum floor, gentle curves, 60% cap.
+    static let cool = ChassisFanProfile(
+        floor: 0,
+        cpuCurve: LinearCurve(points: [(50, 0), (65, 0.25), (75, 0.45), (85, 0.60), (92, 0.85)]),
+        internalCurve: LinearCurve(points: [(35, 0), (37, 0.25), (39, 0.45), (42, 0.70)]),
+        loadCurve: nil,
+        chassisTarget: 35,
+        noiseCap: 0.60,
+        risePerSecond: 0.01,
+        fallPerSecond: 0.005,
+        holdBeforeFall: 30
+    )
+
+    /// Chill: cool case first. ~20% floor to keep heat from soaking in, curves ~5°C earlier,
+    /// load feed-forward, faster rise, slower to back off, 80% cap.
+    static let chill = ChassisFanProfile(
+        floor: 0.20,
+        cpuCurve: LinearCurve(points: [(45, 0.20), (60, 0.35), (70, 0.55), (80, 0.75), (87, 0.95)]),
+        internalCurve: LinearCurve(points: [(34, 0.20), (36, 0.35), (38, 0.50), (41, 0.75)]),
+        loadCurve: LinearCurve(points: [(30, 0), (50, 0.35), (80, 0.60)]),
+        chassisTarget: 33,
+        noiseCap: 0.80,
+        risePerSecond: 0.02,
+        fallPerSecond: 0.005,
+        holdBeforeFall: 60
+    )
+}
+
+/// Chassis-first fan control shared by Cool and Chill: always drives the fans (never hands back to macOS),
+/// never stops them, changes speed gradually, and steers mainly by interior heat and a slow CPU average,
+/// with a long-term trim on palm rest / battery temperature.
 ///
-/// - Main signal: interior heat (`TH0x`), which leads the chassis by a minute or two and is smooth by nature.
-/// - Also tracks a slowly smoothed CPU average, so heat is removed before it reaches the case.
-/// - Long-term trim: if palm rest/battery sit above `chassisTarget`, speed creeps up until they come back.
-///   The trim goes on top of the noise cap: keeping the case cool wins over keeping quiet.
-/// - Noise cap of 60% on the temperature-driven part unless the CPU is really hot or macOS is throttling.
-struct QuietFanController {
-    static let cpuCurve = LinearCurve(points: [(50, 0), (65, 0.25), (75, 0.45), (85, 0.60), (92, 0.85)])
-    static let internalCurve = LinearCurve(points: [(35, 0), (37, 0.25), (39, 0.45), (42, 0.70)])
-    static let chassisTarget = 35.0
-    /// 1°C over target for one minute adds 1.5%.
+/// Both profiles share one high-temperature layer: once a ~10s-smoothed CPU peak (including `TCMz`)
+/// reaches `hotCelsius`, or macOS is throttling, the noise cap goes away, a floor from `hotCurve`
+/// applies, and the fan ramps 4× faster. It stays on until the peak drops below `hotExitCelsius`, then
+/// holds the speed for `hotExitHold` before easing down — without that gap a peak hovering at the
+/// threshold made the fan swing between ~48% and ~76% every minute. While hot, the speed follows a
+/// slower (~40s) view of the peak, because `TCMz` spikes ±5°C from second to second.
+struct ChassisFanController {
+    static let hotCelsius = 85.0
+    static let hotExitCelsius = 80.0
+    static let hotExitHold: TimeInterval = 60
+    static let hotCurve = LinearCurve(points: [(85, 0.60), (95, 1.0)])
+    /// 1°C over the chassis target for one minute adds 1.5%.
     static let trimPerDegreeSecond = 0.00025
     static let maxTrim = 0.30
-    static let noiseCap = 0.60
-    /// Smoothed CPU average at/above this lifts the noise cap (and ramps 4× faster).
-    static let capLiftCelsius = 85.0
-    static let risePerSecond = 0.01
-    static let fallPerSecond = 0.005
-    static let holdBeforeFall: TimeInterval = 30
+
+    let profile: ChassisFanProfile
 
     private var cpuSmoothed: Double?
     private var internalSmoothed: Double?
+    private var loadSmoothed: Double?
+    private var peakSmoothed: Double?
+    private var slowPeakSmoothed: Double?
     private var trim = 0.0
+    private var isHot = false
     private var slew = SlewLimiter()
 
-    /// Starts from the fan's current position so switching modes doesn't jump.
+    init(profile: ChassisFanProfile) {
+        self.profile = profile
+    }
+
+    /// Starts from the fan's current position (holding it briefly) so switching modes doesn't jump.
     mutating func reset(startingAt ratio: Double) {
         cpuSmoothed = nil
         internalSmoothed = nil
+        loadSmoothed = nil
+        peakSmoothed = nil
+        slowPeakSmoothed = nil
         trim = 0
-        slew.reset(to: ratio, hold: Self.holdBeforeFall)
+        isHot = false
+        slew.reset(to: ratio, hold: profile.holdBeforeFall)
     }
 
     /// Returns the fan ratio (0...1) to run at.
@@ -117,87 +179,34 @@ struct QuietFanController {
         let dt = input.interval
         let cpu = input.cpuAverage > 0 ? smooth(&cpuSmoothed, input.cpuAverage, tau: 45, dt: dt) : 0
         let interior = input.interior > 0 ? smooth(&internalSmoothed, input.interior, tau: 10, dt: dt) : 0
+        let load = smooth(&loadSmoothed, max(input.cpuUsage, input.gpuUsage), tau: 20, dt: dt)
+        let rawPeak = max(input.cpuPeak, input.cpuHotspot, input.cpuAverage)
+        let peak = rawPeak > 0 ? smooth(&peakSmoothed, rawPeak, tau: 10, dt: dt) : 0
+        let slowPeak = rawPeak > 0 ? smooth(&slowPeakSmoothed, rawPeak, tau: 40, dt: dt) : 0
 
-        let isHot = cpu >= Self.capLiftCelsius || input.isThrottling
-        let heat = max(Self.cpuCurve(cpu), interior > 0 ? Self.internalCurve(interior) : 0)
-        var target = min(heat, isHot ? 1.0 : Self.noiseCap)
+        if input.isThrottling || peak >= Self.hotCelsius {
+            isHot = true
+        } else if isHot && peak < Self.hotExitCelsius {
+            isHot = false
+            slew.hold(atLeast: Self.hotExitHold)
+        }
+        var heat = max(profile.cpuCurve(cpu), interior > 0 ? profile.internalCurve(interior) : 0)
+        if let loadCurve = profile.loadCurve {
+            heat = max(heat, loadCurve(load))
+        }
+        var target = isHot ? max(heat, Self.hotCurve(slowPeak)) : min(heat, profile.noiseCap)
 
         if input.chassis > 0 {
-            trim += (input.chassis - Self.chassisTarget) * Self.trimPerDegreeSecond * dt
+            trim += (input.chassis - profile.chassisTarget) * Self.trimPerDegreeSecond * dt
             trim = min(max(trim, 0), Self.maxTrim)
         }
-        target = min(target + trim, 1.0)
+        target = min(max(target + trim, profile.floor), 1.0)
 
         return slew.step(
             toward: target,
-            risePerSecond: Self.risePerSecond * (isHot ? 4 : 1),
-            fallPerSecond: Self.fallPerSecond,
-            holdBeforeFall: Self.holdBeforeFall,
-            dt: dt
-        )
-    }
-}
-
-/// Turbo: a more eager take on macOS auto. Starts earlier, reacts to load before temperatures climb,
-/// jumps up immediately, and hands the fans back to macOS once things have been cool for a minute.
-struct TurboFanController {
-    static let tempCurve = LinearCurve(points: [(58, 0.20), (70, 0.50), (80, 0.80), (88, 1.0)])
-    /// Feed-forward from CPU/GPU busy %: spin up as load arrives instead of waiting for heat.
-    static let loadCurve = LinearCurve(points: [(40, 0), (60, 0.30), (90, 0.60)])
-    static let engageCelsius = 58.0
-    static let engageLoad = 60.0
-    /// Release once a slowly smoothed temperature stays at/below this (idle on an M3 MBP sits ~48–52°C).
-    static let releaseCelsius = 54.0
-    static let releaseAfter: TimeInterval = 60
-    static let fallPerSecond = 0.02
-    static let holdBeforeFall: TimeInterval = 15
-
-    private var tempSmoothed: Double?
-    /// Slower view of the same temperature for the release decision, so idle jitter doesn't reset the countdown.
-    private var releaseSmoothed: Double?
-    private var isEngaged = false
-    private var coolFor: TimeInterval = 0
-    private var slew = SlewLimiter()
-
-    mutating func reset(startingAt ratio: Double) {
-        tempSmoothed = nil
-        releaseSmoothed = nil
-        isEngaged = false
-        coolFor = 0
-        slew.reset(to: ratio)
-    }
-
-    /// Returns the fan ratio (0...1) to run at, or nil to leave the fans to macOS.
-    mutating func step(_ input: FanControlInputs) -> Double? {
-        let dt = input.interval
-        let raw = max(input.cpuAverage, input.cpuPeak - 5)
-        guard raw > 0 else { return isEngaged ? slew.output : nil }
-        let temp = smooth(&tempSmoothed, raw, tau: 3, dt: dt)
-        let slowTemp = smooth(&releaseSmoothed, raw, tau: 20, dt: dt)
-        let load = max(input.cpuUsage, input.gpuUsage)
-
-        if !isEngaged {
-            guard temp >= Self.engageCelsius || load >= Self.engageLoad || input.isWarm else { return nil }
-            isEngaged = true
-            coolFor = 0
-        } else if slowTemp <= Self.releaseCelsius && Self.loadCurve(load) == 0 && !input.isWarm {
-            coolFor += dt
-            if coolFor >= Self.releaseAfter {
-                isEngaged = false
-                coolFor = 0
-                slew.reset(to: 0)
-                return nil
-            }
-        } else {
-            coolFor = 0
-        }
-
-        let target = max(Self.tempCurve(temp), Self.loadCurve(load))
-        return slew.step(
-            toward: target,
-            risePerSecond: .infinity,
-            fallPerSecond: Self.fallPerSecond,
-            holdBeforeFall: Self.holdBeforeFall,
+            risePerSecond: profile.risePerSecond * (isHot ? 4 : 1),
+            fallPerSecond: profile.fallPerSecond,
+            holdBeforeFall: isHot ? max(profile.holdBeforeFall, Self.hotExitHold) : profile.holdBeforeFall,
             dt: dt
         )
     }

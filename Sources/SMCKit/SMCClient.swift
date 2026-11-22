@@ -84,9 +84,11 @@ public final class SMCClient: @unchecked Sendable {
         "TC0P", "TC0D", "TC0E", "TC0F", "TC1C", "TC2C"
     ]
 
-    // Common Apple Silicon + Intel GPU temperature SMC keys
+    // Common Apple Silicon + Intel GPU temperature SMC keys. The second row exists on an M3; reading them all
+    // matters because a single GPU sensor can briefly report a placeholder (~-1.35°C) while the GPU idles.
     private let gpuTempKeys: [String] = [
-        "Tg05", "Tg0D", "Tg0L", "Tg0T", "TG0P", "TG0D"
+        "Tg05", "Tg0D", "Tg0L", "Tg0T", "TG0P", "TG0D",
+        "Tg0C", "Tg0O", "Tg0P", "Tg0W", "Tg0X", "Tg0a", "Tg0b", "Tg0i", "Tg0j", "Tg0u", "Tg0v"
     ]
 
     /// Hottest-core aggregates. `TCMz` read ~10°C above the regular `Tp` keys under load on an M3, but it also
