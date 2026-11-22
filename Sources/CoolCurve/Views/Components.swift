@@ -337,7 +337,7 @@ struct LanguageToggle: View {
     }
 }
 
-/// Three-segment menu bar density switch (Compact / Balanced / Full).
+/// Three-segment menu bar preset switch (S / M / L). Lit only while the chosen items match a preset.
 struct DensityToggle: View {
     @ObservedObject var appState: AppState
     let theme: MmTheme
@@ -357,9 +357,9 @@ struct DensityToggle: View {
     }
 
     private func segment(_ title: String, _ density: MenuBarDensity) -> some View {
-        let selected = appState.menuBarDensity == density
+        let selected = appState.menuBarPreset == density
         return Button {
-            appState.menuBarDensity = density
+            appState.applyMenuBarPreset(density)
         } label: {
             Text(title)
                 .font(.system(size: 10.5, weight: .medium, design: .monospaced))

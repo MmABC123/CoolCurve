@@ -22,7 +22,6 @@ public struct MenuBarPopoverView: View {
             FooterBar(appState: appState, theme: theme)
             HStack(spacing: 8) {
                 LanguageToggle(appState: appState, theme: theme)
-                DensityToggle(appState: appState, theme: theme)
                 Spacer()
                 Button(action: onOpenWindow) {
                     Text("↗ " + appState.t.openWindow)

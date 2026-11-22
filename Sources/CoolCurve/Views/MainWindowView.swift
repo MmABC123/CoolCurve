@@ -30,6 +30,10 @@ public struct MainWindowView: View {
                 .padding(.horizontal, 18)
                 .padding(.vertical, 14)
             Divider1px(theme: theme)
+            MenuBarSettingsSection(appState: appState, theme: theme)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 14)
+            Divider1px(theme: theme)
             FooterBar(appState: appState, theme: theme)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)
@@ -42,7 +46,6 @@ public struct MainWindowView: View {
     private var titleBar: some View {
         HStack(spacing: 10) {
             Spacer()
-            DensityToggle(appState: appState, theme: theme)
             LanguageToggle(appState: appState, theme: theme)
             Button {
                 appState.isWindowPinned.toggle()

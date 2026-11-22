@@ -22,13 +22,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem = item
         if let button = item.button {
-            button.image = makeMenuBarIcon()
-            button.imagePosition = .imageLeading
-            button.font = NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .medium)
+            button.font = MenuBarFormat.font
             button.target = self
             button.action = #selector(statusItemClicked(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-            item.length = fixedStatusItemLength(for: button)
         }
         updateTitle()
 
@@ -51,16 +48,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         appState.$isWindowPinned
             .sink { [weak self] pinned in self?.mainWindow?.level = pinned ? .floating : .normal }
-            .store(in: &cancellables)
-
-        appState.$menuBarDensity
-            .dropFirst()
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                guard let self, let item = self.statusItem, let button = item.button else { return }
-                item.length = self.fixedStatusItemLength(for: button)
-                self.updateTitle()
-            }
             .store(in: &cancellables)
     }
 
@@ -133,8 +120,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
+    /// Text and fixed width of the status item; called after every state change.
     private func updateTitle() {
-        statusItem?.button?.title = " " + appState.menuBarText
+        guard let item = statusItem, let button = item.button else { return }
+        let text = appState.menuBarItems.isEmpty ? "" : " " + appState.menuBarText
+        if button.title != text { button.title = text }
+        if button.image == nil { button.image = MenuBarFormat.gaugeIcon }
+        button.imagePosition = text.isEmpty ? .imageOnly : .imageLeading
+        let width = appState.menuBarWidth
+        if item.length != width { item.length = width }
     }
 
     /// Explicitly sets `applicationIconImage` so the Dock tile refreshes immediately when
@@ -146,57 +140,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         NSApp.applicationIconImage = icon
         NSApp.dockTile.display()
-    }
-
-    /// Vector template icon matching the segmented dial AppIcon (`isTemplate` adapts to light/dark menu bars).
-    private func makeMenuBarIcon() -> NSImage {
-        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { _ in
-            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
-            let black = NSColor.black.cgColor
-            ctx.setStrokeColor(black)
-            ctx.setFillColor(black)
-            ctx.setLineCap(.round)
-
-            let center = CGPoint(x: 9, y: 9)
-            let arcs: [(CGFloat, CGFloat)] = [(140, 200), (222, 282), (304, 364)]
-            ctx.setLineWidth(1.6)
-            for (startDeg, endDeg) in arcs {
-                ctx.beginPath()
-                ctx.addArc(
-                    center: center,
-                    radius: 6.8,
-                    startAngle: startDeg * .pi / 180,
-                    endAngle: endDeg * .pi / 180,
-                    clockwise: false
-                )
-                ctx.strokePath()
-            }
-
-            ctx.addEllipse(in: CGRect(x: 7, y: 7, width: 4, height: 4))
-            ctx.fillPath()
-
-            let rad = 325.0 * CGFloat.pi / 180.0
-            let tip = CGPoint(x: 9 + 4.4 * cos(rad), y: 9 + 4.4 * sin(rad))
-            ctx.setLineWidth(1.5)
-            ctx.beginPath()
-            ctx.move(to: center)
-            ctx.addLine(to: tip)
-            ctx.strokePath()
-            return true
-        }
-        image.isTemplate = true
-        image.accessibilityDescription = "CoolCurve"
-        return image
-    }
-
-    /// Size the item for the widest possible text (100% / 100°C) so neighbouring menu bar
-    /// icons never shift as the numbers change.
-    private func fixedStatusItemLength(for button: NSStatusBarButton) -> CGFloat {
-        let font = button.font ?? NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .medium)
-        let widest = AppState.widestMenuBarText(for: appState.menuBarDensity)
-        let textWidth = (" " + widest as NSString).size(withAttributes: [.font: font]).width
-        let imageWidth = button.image?.size.width ?? 16
-        return ceil(textWidth + imageWidth + 10)
     }
 
     /// `kill` / `pkill` send SIGTERM, which skips applicationWillTerminate by default and would

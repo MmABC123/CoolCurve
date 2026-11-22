@@ -6,13 +6,6 @@ import ServiceManagement
 import SMCKit
 #endif
 
-/// Menu bar width preset so notch MacBooks can keep the status item compact.
-public enum MenuBarDensity: String, CaseIterable, Sendable {
-    case compact   // 52°C
-    case balanced  // CPU 23%  52°C
-    case full      // CPU 23%  MEM 61%  52°C
-}
-
 /// Something the popover/window should tell the user. Stored as data so it re-renders in the current language.
 public enum StatusMessage: Equatable, Sendable {
     case fan(FanCommandError)
@@ -50,7 +43,9 @@ public final class AppState: ObservableObject {
     private enum DefaultsKey {
         static let language = "language"
         static let windowPinned = "windowPinned"
+        /// Pre-customization S / M / L setting; read once to seed `menuBarItems`.
         static let menuBarDensity = "menuBarDensity"
+        static let menuBarItems = "menuBarItems"
         static let preferredCurveMode = "preferredCurveMode"
     }
 
@@ -78,9 +73,14 @@ public final class AppState: ObservableObject {
     @Published public var isWindowPinned: Bool {
         didSet { if !Self.isSnapshotMode { UserDefaults.standard.set(isWindowPinned, forKey: DefaultsKey.windowPinned) } }
     }
-    @Published public var menuBarDensity: MenuBarDensity {
-        didSet { if !Self.isSnapshotMode { UserDefaults.standard.set(menuBarDensity.rawValue, forKey: DefaultsKey.menuBarDensity) } }
+    @Published public var menuBarItems: Set<MenuBarItem> {
+        didSet {
+            guard !Self.isSnapshotMode else { return }
+            UserDefaults.standard.set(MenuBarItem.allCases.filter(menuBarItems.contains).map(\.rawValue),
+                                      forKey: DefaultsKey.menuBarItems)
+        }
     }
+
     @Published public private(set) var launchAtLogin = false
 
     // MARK: Fan control
@@ -123,7 +123,12 @@ public final class AppState: ObservableObject {
         let defaults = UserDefaults.standard
         language = defaults.string(forKey: DefaultsKey.language).flatMap(AppLanguage.init) ?? .systemDefault
         isWindowPinned = defaults.bool(forKey: DefaultsKey.windowPinned)
-        menuBarDensity = defaults.string(forKey: DefaultsKey.menuBarDensity).flatMap(MenuBarDensity.init) ?? .full
+        if let saved = defaults.stringArray(forKey: DefaultsKey.menuBarItems) {
+            menuBarItems = Set(saved.compactMap(MenuBarItem.init))
+        } else {
+            let density = defaults.string(forKey: DefaultsKey.menuBarDensity).flatMap(MenuBarDensity.init) ?? .full
+            menuBarItems = density.items
+        }
         isSMCAuthorized = fanService.isHelperAuthorized()
         launchAtLogin = SMAppService.mainApp.status == .enabled
 
@@ -172,37 +177,47 @@ public final class AppState: ObservableObject {
         }
     }
 
+    /// The menu bar string for the chosen items, from the latest readings.
     public var menuBarText: String {
-        let temp = thermal.cpuAverageCelsius > 0 ? Int(thermal.cpuAverageCelsius.rounded()) : nil
-        return Self.menuBarText(
-            density: menuBarDensity,
+        MenuBarFormat.text(menuBarItems, MenuBarValues(
             cpu: Int(cpuUsage.rounded()),
-            mem: Int(memoryPressure.percent.rounded()),
-            celsius: temp
-        )
+            memory: Int(memoryPressure.percent.rounded()),
+            cpuTemp: thermal.cpuAverageCelsius > 0 ? Int(thermal.cpuAverageCelsius.rounded()) : nil,
+            gpuTemp: thermal.gpuCelsius > 0 ? Int(thermal.gpuCelsius.rounded()) : nil,
+            fanRPM: hasFans ? averageFanRPM : nil,
+            watts: power.systemWatts.map { Int($0.rounded()) },
+            mode: fanModeName
+        ))
     }
 
-    /// Widest realistic text for a given density; the status item is sized to this so it never changes width.
-    public static func widestMenuBarText(for density: MenuBarDensity) -> String {
-        menuBarText(density: density, cpu: 100, mem: 99, celsius: 99)
+    /// Fixed width of the status item for the current items and language.
+    public var menuBarWidth: CGFloat {
+        MenuBarFormat.statusItemWidth(menuBarItems, modeNames: [t.auto, t.cool, t.chill, t.manual])
     }
 
-    /// Numbers are padded to two digits with FIGURE SPACE (U+2007, exactly one digit wide in the
-    /// monospaced-digit font), and a missing reading uses FIGURE DASH (U+2012), so 9 → 19 → 99
-    /// doesn't change the text width.
-    static func menuBarText(density: MenuBarDensity, cpu: Int, mem: Int, celsius: Int?) -> String {
-        func pad(_ value: Int) -> String {
-            let digits = String(value)
-            return String(repeating: "\u{2007}", count: max(0, 2 - digits.count)) + digits
+    /// The S / M / L preset matching the current items, if any.
+    public var menuBarPreset: MenuBarDensity? {
+        MenuBarDensity.allCases.first { $0.items == menuBarItems }
+    }
+
+    public func applyMenuBarPreset(_ preset: MenuBarDensity) {
+        menuBarItems = preset.items
+    }
+
+    public func toggleMenuBarItem(_ item: MenuBarItem) {
+        if menuBarItems.contains(item) {
+            menuBarItems.remove(item)
+        } else {
+            menuBarItems.insert(item)
         }
-        let temp = celsius.map(pad) ?? "\u{2012}\u{2012}"
-        switch density {
-        case .compact:
-            return "\(temp)°C"
-        case .balanced:
-            return "CPU \(pad(cpu))%  \(temp)°C"
-        case .full:
-            return "CPU \(pad(cpu))%  MEM \(pad(mem))%  \(temp)°C"
+    }
+
+    private var fanModeName: String {
+        switch fanMode {
+        case .auto: return t.auto
+        case .cool: return t.cool
+        case .chill: return t.chill
+        case .manual: return t.manual
         }
     }
 

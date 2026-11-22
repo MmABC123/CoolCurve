@@ -42,6 +42,18 @@ public struct Strings: Sendable {
     public let densityBalanced: String
     public let densityFull: String
     public let menuBarDensityHelp: String
+    public let menuBarSection: String
+    public let menuBarPresets: String
+    public let menuBarShow: String
+    public let menuBarItemCPU: String
+    public let menuBarItemMemory: String
+    public let menuBarItemCPUTemp: String
+    public let menuBarItemGPUTemp: String
+    public let menuBarItemFan: String
+    public let menuBarItemPower: String
+    public let menuBarItemMode: String
+    public let menuBarWidth: @Sendable (Int) -> String
+    public let menuBarNotchWarning: String
 
     // Fan
     public let fan: String
@@ -104,6 +116,18 @@ public struct Strings: Sendable {
         densityBalanced: "M",
         densityFull: "L",
         menuBarDensityHelp: "Menu bar width: Temp / CPU + Temp / Full",
+        menuBarSection: "Menu bar",
+        menuBarPresets: "Presets",
+        menuBarShow: "Show",
+        menuBarItemCPU: "CPU",
+        menuBarItemMemory: "Memory",
+        menuBarItemCPUTemp: "CPU temp",
+        menuBarItemGPUTemp: "GPU temp",
+        menuBarItemFan: "Fan speed",
+        menuBarItemPower: "Power",
+        menuBarItemMode: "Fan mode",
+        menuBarWidth: { "≈ \($0) pt" },
+        menuBarNotchWarning: "May end up hidden behind the notch — try showing less",
         fan: "Fan",
         auto: "Auto",
         cool: "Cool",
@@ -158,6 +182,18 @@ public struct Strings: Sendable {
         densityBalanced: "中",
         densityFull: "全",
         menuBarDensityHelp: "菜单栏宽度：仅温度 / CPU+温度 / 完整",
+        menuBarSection: "菜单栏",
+        menuBarPresets: "快速预设",
+        menuBarShow: "显示内容",
+        menuBarItemCPU: "CPU",
+        menuBarItemMemory: "内存",
+        menuBarItemCPUTemp: "CPU 温度",
+        menuBarItemGPUTemp: "GPU 温度",
+        menuBarItemFan: "风扇转速",
+        menuBarItemPower: "功耗",
+        menuBarItemMode: "风扇模式",
+        menuBarWidth: { "约 \($0) pt" },
+        menuBarNotchWarning: "刘海屏上可能被挡住，建议精简",
         fan: "风扇",
         auto: "原厂",
         cool: "冷静",

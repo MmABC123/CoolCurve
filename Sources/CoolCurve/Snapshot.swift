@@ -9,6 +9,8 @@ enum SnapshotRenderer {
     static func run(outputDirectory: URL, delay: TimeInterval) {
         let state = AppState.shared
         state.showModeForSnapshot(.cool)
+        // Show a typical menu bar setup rather than whatever is saved (not persisted in snapshot mode).
+        state.menuBarItems = MenuBarDensity.balanced.items
         try? FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
         writeModeCurves(to: outputDirectory)
         if delay > 0 {
