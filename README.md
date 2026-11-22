@@ -1,97 +1,159 @@
-# CoolCurve
+<p align="center">
+  <img src="Resources/AppIcon.svg" width="96" alt="CoolCurve icon">
+</p>
 
-**Minimal thermal monitor & fan curve control for Apple Silicon Macs** (`by Mm`).
+<h1 align="center">CoolCurve</h1>
 
-一个极简的原生 macOS 菜单栏温控与状态工具，专注于 **看状态（温度 / 功耗 / 内存压力 / 热源）** 与 **控风扇（4 档策略）**。零第三方依赖，要求 macOS 14+、Apple Silicon。
+<p align="center">
+  <b>Draw how your Mac's fan should behave.</b><br>
+  Minimal thermal monitor &amp; fan curve control for Apple Silicon Macs.
+</p>
+
+<p align="center">
+  <code>macOS 14+</code> · <code>Apple Silicon</code> · <code>Swift, no dependencies</code> · <code>MIT</code>
+</p>
+
+<p align="center"><b>English</b> · <a href="README.zh-CN.md">简体中文</a></p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/popover-en-dark.png">
+    <img src="docs/images/popover-en-light.png" width="316" align="top" alt="Menu bar popover">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/window-en-dark.png">
+    <img src="docs/images/window-en-light.png" width="456" align="top" alt="Main window with 5-minute history">
+  </picture>
+</p>
+
+| <img src="docs/images/mode-auto.svg" width="150" alt="Auto"> | <img src="docs/images/mode-cool.svg" width="150" alt="Cool"> | <img src="docs/images/mode-chill.svg" width="150" alt="Chill"> | <img src="docs/images/mode-manual.svg" width="150" alt="Manual"> |
+|:-:|:-:|:-:|:-:|
+| **Auto**<br>macOS decides | **Cool**<br>quiet, keeps the case cool | **Chill**<br>cooler case, more fan noise | **Manual**<br>fixed speed |
+
+<p align="center"><sub>Each mode is a curve from CPU temperature (40–95°C) to fan speed; the orange end is the high-temperature clamp both curve modes share.</sub></p>
+
+A tiny native macOS menu bar app for two things: **seeing what your Mac is doing** (temperature, power, memory pressure, what's heating it up) and **deciding how its fan behaves**. No third-party dependencies. Requires macOS 14+ on Apple Silicon.
 
 > [!WARNING]
-> **个人项目，风险自负。**
-> - 只在 **MacBook Pro 14" M3（Mac15,3，单风扇）** 上测试过。其他机型的 SMC 传感器名可能不同，温度读数和风扇策略可能不准确。
-> - 首次开启风扇控制时会以管理员权限安装一个 **setuid root 的辅助程序**（`mm-smc-helper`），之后它可以直接写 SMC 改风扇转速。使用前请先阅读源码。
-> - 需要自行从源码编译；不提供签名或公证过的安装包，不保证维护，也不提供支持。
+> **Personal project, use at your own risk.**
+> - Only tested on a **MacBook Pro 14" M3 (Mac15,3, single fan)**. Other models may use different SMC sensor names, so readings and fan behavior may be off.
+> - The first time you enable fan control, it installs a **setuid-root helper** (`mm-smc-helper`) with administrator rights; from then on it can write to the SMC to change fan speed. Read the source before you use it.
+> - Build it yourself from source. There's no signed or notarized download, no promise of maintenance, and no support.
 >
-> *Personal project, use at your own risk: only tested on an M3 MacBook Pro 14", installs a setuid-root helper that writes to the SMC, build from source, no support.*
+> **Ran into a problem, or have a different Mac?** Instead of waiting for a fix, point an AI coding assistant (Claude Code or similar) at this repo and have it adapt the code for you. The project is small (~3k lines), dependency-free, and ships with the tooling to read your Mac's sensors.
 
 ---
 
-## 核心特性
+## Features
 
-- **4 档风扇策略**：
-  - **原厂（Auto）**：完全交由 macOS 原生温控自动调节
-  - **冷静（Cool）**：机身不热、声音优先。插电时常驻接管、不停转（最低转速）；主要跟随机内热量（`TH0x`，比机身早 1–2 分钟升温）和慢速平滑的 CPU 平均温度，掌托/电池超过 `35°C` 时缓慢追加转速；升速 ≤1%/秒、降速 ≤0.5%/秒（升速后保持 30 秒）；静音上限 `60%`
-  - **清凉（Chill）**：机身更凉、允许更多风噪。常驻 ≥`20%` 转速；曲线比冷静提前约 5°C；CPU/GPU 负载持续偏高时提前提速；掌托/电池目标 `33°C`；升速 ≤2%/秒、降速 ≤0.5%/秒（升速后保持 60 秒）；上限 `80%`
-  - 两个模式共用高温压制：CPU 峰值（含 `TCMz`，约 10 秒平滑）≥ `85°C` 或系统开始降频时，取消上限、按 85°C→60% / 95°C→100% 兜底（跟随约 40 秒平滑的峰值）并 4 倍速升速；降到 `80°C` 以下才退出，退出后先保持 60 秒再降，避免在门槛附近来回摆
-  - **手动（Manual）**：自由拖动滑块在最低到最大转速间定速
-  - 百分比指最低转速到最高转速之间的位置（0% = 最低转速，不会停转）
-- **多重安全兜底**：
-  - CPU 峰值（含最热核心汇总传感器 `TCMz`）连续约 6 秒 ≥ `95°C`：手动档交还 macOS 原生温控；冷静/清凉保持所选模式但暂停，降到 `85°C` 以下自动恢复
-  - 电池供电：手动档在拔电时交还系统；冷静/清凉在电池下暂停（可照常选择），接上电源自动恢复
-  - 退出/终止 App 时交还 macOS 原生温控；无风扇机型（如 MacBook Air）自动切换为纯监控模式
-- **渐进式信息展示**：
-  - 菜单栏常驻读数，支持 **简 / 中 / 全** 三档宽度（适配刘海屏，固定宽度零抖动）
-  - 左键弹窗快速查看与调节；右键或点 `↗` 打开可置顶主窗口，含 **近 5 分钟温度/风扇/降频曲线**、**GPU 使用率**与 **整机实时功耗（W）**
-  - **可交互发热源**：机器空闲时自动隐藏，发热时显示头号高耗进程，点击展开 Top 3 支持一键切换、退出或强退
-- **原生与双语**：Swift + SwiftUI + AppKit + IOKit（AppleSMC）+ Mach/libproc，内置中/英切换与深/浅色 `maxminimalism` 主题
+- **Four fan modes**, each drawn in the app as its own curve (CPU temperature → fan speed) with a live dot showing where the fan is right now:
+  - **Auto**: macOS manages the fan.
+  - **Cool**: keep the case from warming up, quietly. On AC it's always in control and never stops the fan (hardware minimum). It follows interior heat (`TH0x`, which rises 1–2 minutes before the case does) and a slowly smoothed CPU average, and adds speed slowly if the palm rest or battery goes above `35°C`. Ramps up ≤1%/s, down ≤0.5%/s (holding 30 s after a rise). Quiet cap `60%`.
+  - **Chill**: a cooler case in exchange for more fan noise. Always ≥`20%`, curves start ~5°C earlier, speeds up ahead of sustained CPU/GPU load, palm-rest target `33°C`. Ramps up ≤2%/s, down ≤0.5%/s (holding 60 s). Cap `80%`.
+  - Cool and Chill share one high-temperature layer: when the CPU peak (including the `TCMz` hottest-core sensor, ~10 s smoothed) reaches `85°C` or macOS starts throttling, the cap goes away, a floor of 85°C→60% / 95°C→100% applies (following a ~40 s smoothed peak), and the fan ramps 4× faster. It only lets go below `80°C`, then holds for 60 s, so it doesn't swing around the threshold.
+  - **Manual**: pick a fixed speed with the slider.
+  - Percentages are positions between minimum and maximum RPM (0% = minimum RPM, still spinning).
+- **Safety nets**:
+  - CPU peak (including `TCMz`) at or above `95°C` for ~6 s: Manual hands the fan back to macOS; Cool/Chill stay selected but pause, and resume below `85°C`.
+  - On battery: Manual hands back to macOS when you unplug; Cool/Chill pause while on battery (you can still select them) and resume when you plug in.
+  - Quitting or killing the app hands the fan back to macOS. Fanless Macs (e.g. MacBook Air) get monitoring only.
+- **Glanceable first, details on demand**:
+  - Menu bar readout in **S / M / L** widths (notch-friendly, fixed width so it never jitters).
+  - Click for a popover; right-click or `↗` for a pinnable window with **5-minute temperature / fan / throttling history**, **GPU busy %** and **whole-system power (W)**.
+  - **Heat source**: hidden while the Mac is idle; when it's working, shows the busiest process, expandable to the top 3 with switch to / quit / force quit.
+- **Light**: samples every 2 s and only does the expensive work when it matters (no process scan while idle, SMC key lookups cached, HID sensors read only as a fallback). About 1–2% of one core with the window open.
+- **Native and bilingual**: Swift + SwiftUI + AppKit + IOKit (AppleSMC) + Mach/libproc, English/Chinese, light/dark `maxminimalism` theme.
 
 ---
 
-## 构建与运行
+## Why not design your own fan curve?
+
+How a fan should behave is personal. One person wants silence and doesn't mind a warm palm rest; another wants the case cool on their lap; another only cares about the chip never throttling. It also depends on your Mac, your desk, your room, and your ears. No preset fits everyone, including the ones in this repo.
+
+Now that an AI coding assistant can read, change, and test code for you, you don't have to settle for someone else's presets. **This project is an invitation: design the curve and the modes you actually want.**
+
+That's how CoolCurve's own modes came about. We read every temperature sensor on the test Mac, ran full-load tests while logging them, found which sensors track the chip, the interior, and the case, and shaped the Cool and Chill curves from that data. You can do the same:
+
+1. **Look at your sensors**: build the app, then run `./CoolCurve.app/Contents/MacOS/mm-smc-helper status`. Ask your assistant to dump every temperature key on your Mac and work out which ones matter.
+2. **Say what you care about**: quiet, a cool palm rest, a cool lap, no throttling, battery life… in plain words.
+3. **Measure**: have the assistant run a load test (for example 10 minutes of full CPU load) while logging fan speed and temperatures, then compare.
+4. **Shape it**: each mode is a `ChassisFanProfile` in [`FanCurveControllers.swift`](Sources/CoolCurve/Services/FanCurveControllers.swift): the curve points, the floor, the quiet cap, how fast it ramps up and down. Change them, add a profile of your own, or write a new controller.
+5. **Watch it**: the chart in the app is drawn from those same profiles, and the live dot shows the fan following (or not following) your curve.
+
+A prompt to start with:
+
+> This is CoolCurve, a fan control app for Apple Silicon Macs. My Mac is a *[model]*. I want *[what you care about]*. Read the code, list the temperature sensors on my Mac, run a 10-minute load test logging fan speed and temperatures, and propose a new fan mode for me. Keep the shared high-temperature layer and the 95°C safety fallback.
+
+Whatever you change, keep the safety nets: the shared high-temperature layer, the 95°C fallback, and handing the fan back to macOS on quit.
+
+---
+
+## Build and run
 
 ```bash
 zsh scripts/build_app.sh
 open CoolCurve.app
 ```
 
-首次开启风扇控制时，点击「解锁风扇控制」输入一次管理员密码。App 会将 `mm-smc-helper` 安装到 `/Library/PrivilegedHelperTools/`（setuid root），之后所有 SMC 写入均通过该辅助工具完成。
+The first time you enable fan control, click "Unlock fan control" and enter your administrator password once. The app installs `mm-smc-helper` into `/Library/PrivilegedHelperTools/` (setuid root), and all SMC writes go through it from then on.
 
-命令行查看传感器与风扇状态：
+Check sensors and fans from the command line:
 
 ```bash
 ./CoolCurve.app/Contents/MacOS/mm-smc-helper status
 ```
 
-## 打包发布（DMG）
+Regenerate the README images (popover and window in English/Chinese, light/dark, plus the mode curves) from live readings. It never touches the fan or your settings; the number is how many seconds of history to collect first:
+
+```bash
+./CoolCurve.app/Contents/MacOS/CoolCurve --snapshot docs/images 300
+```
+
+## Package a DMG (for your own machines)
 
 ```bash
 zsh scripts/package_dmg.sh 1.0.0
 ```
 
-产物会输出到 `dist/CoolCurve-1.0.0-arm64.dmg` 并打印 SHA-256 校验值（可直接用于 GitHub Releases 或 Homebrew Cask）。
+The output lands in `dist/CoolCurve-1.0.0-arm64.dmg` with its SHA-256 printed. Without Apple Developer signing and notarization, macOS will refuse to open it on another Mac until you run:
 
-> 若未配置 Apple Developer 公证证书，其他用户下载后首次打开如遇 macOS 提示“无法验证开发者”，可执行：
-> ```bash
-> xattr -cr /Applications/CoolCurve.app
-> ```
-
----
-
-## 目录结构
-
-```text
-Resources/
-├── AppIcon.icns          macOS 应用图标（分段仪表旋钮）
-├── AppIcon.svg           应用图标矢量源文件
-└── MenuBarIcon.svg       菜单栏图标矢量源文件
-Sources/
-├── CSMCKit/              C：AppleSMC 读写 + IOHID 温度传感器
-├── SMCKit/               Swift：SMCClient，温度快照、功耗与风扇控制
-├── mm-smc-helper/        root 辅助命令行：status / auto / set / ratio
-└── CoolCurve/            菜单栏与主窗口 App
-    ├── main.swift        状态栏图标、弹窗与主窗口生命周期
-    ├── AppState.swift    采样循环、4 档风扇策略、高温/拔电兜底、偏好持久化
-    ├── L10n.swift        中/英文案表
-    ├── Services/         SystemMonitorService、FanControlService、ProcessSampler
-    └── Views/            MenuBarPopoverView、MainWindowView、Components、MmDesignSystem
-scripts/
-├── build_app.sh          原生编译并生成 CoolCurve.app
-├── generate_icon.swift   生成全尺寸 AppIcon.icns
-└── package_dmg.sh        一键打包发布用 DMG
+```bash
+xattr -cr /Applications/CoolCurve.app
 ```
 
-> 构建脚本直接调用 Command Line Tools 的 `swiftc`，无 SwiftUI 宏插件依赖，因此视图内不使用 `@State`，界面状态统一由 `AppState` 管理。
+---
+
+## Project layout
+
+```text
+docs/images/                 README screenshots and mode curves (generated)
+Resources/
+├── AppIcon.icns             App icon (segmented gauge knob)
+├── AppIcon.svg              App icon source
+└── MenuBarIcon.svg          Menu bar icon source
+Sources/
+├── CSMCKit/                 C: AppleSMC read/write + IOHID temperature sensors
+├── SMCKit/                  Swift: SMCClient — thermal snapshot, power, fan control
+├── mm-smc-helper/           Root helper CLI: status / auto / set / ratio
+└── CoolCurve/               Menu bar app and main window
+    ├── main.swift           Status item, popover and window lifecycle
+    ├── AppState.swift       Sampling loop, fan modes, safety nets, preferences
+    ├── L10n.swift           English/Chinese strings
+    ├── Snapshot.swift       `--snapshot`: renders the README images
+    ├── Services/            FanCurveControllers (Cool/Chill profiles), FanControlService,
+    │                        SystemMonitorService, ProcessSampler
+    └── Views/               MenuBarPopoverView, MainWindowView, Components,
+                             FanCurveChart, MmDesignSystem
+scripts/
+├── build_app.sh             Native build that produces CoolCurve.app
+├── generate_icon.swift      Generates the full-size AppIcon.icns
+└── package_dmg.sh           Packages a DMG
+```
+
+> The build script calls the Command Line Tools `swiftc` directly, without the SwiftUI macro plugins, so views don't use `@State`; all UI state lives in `AppState`.
 
 ---
 
-## 许可证
+## License
 
-[MIT](LICENSE)：可自由使用、修改和分发，按原样提供，不附带任何担保。
+[MIT](LICENSE): free to use, modify, and distribute, provided as is, without warranty.
