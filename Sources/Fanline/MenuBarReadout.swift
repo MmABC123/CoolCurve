@@ -101,7 +101,7 @@ enum MenuBarFormat {
             return true
         }
         image.isTemplate = true
-        image.accessibilityDescription = "CoolCurve"
+        image.accessibilityDescription = "Fanline"
         return image
     }()
 }

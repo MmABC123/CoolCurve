@@ -38,7 +38,7 @@ public final class FanControlService: @unchecked Sendable {
 
     /// SMC writes run one at a time, in the order they were issued. Without this, a slow ratio write
     /// (M3/M4 `Ftst` unlock waits up to ~1.2s) could land after a later "auto" and re-pin the fans.
-    private let commandQueue = DispatchQueue(label: "com.fiveamai.coolcurve.fan-commands", qos: .userInitiated)
+    private let commandQueue = DispatchQueue(label: "com.fiveamai.fanline.fan-commands", qos: .userInitiated)
     private let generationLock = NSLock()
     private var latestGeneration = 0
 

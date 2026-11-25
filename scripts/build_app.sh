@@ -3,8 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="${0:A:h:h}"
 BUILD_DIR="$ROOT_DIR/.build/app-build"
-MODULE_CACHE="/tmp/coolcurve-module-cache"
-APP_BUNDLE="$ROOT_DIR/CoolCurve.app"
+MODULE_CACHE="/tmp/fanline-module-cache"
+APP_BUNDLE="$ROOT_DIR/Fanline.app"
 
 mkdir -p "$BUILD_DIR" "$MODULE_CACHE"
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
@@ -43,7 +43,7 @@ echo "[2/4] Compiling privileged helper (mm-smc-helper)..."
   "$ROOT_DIR/Sources/mm-smc-helper/main.swift" \
   -o "$APP_BUNDLE/Contents/MacOS/mm-smc-helper"
 
-echo "[3/4] Compiling native macOS app (CoolCurve)..."
+echo "[3/4] Compiling native macOS app (Fanline)..."
 "$SWIFTC" -O \
   -target arm64-apple-macosx14.0 \
   -sdk "$SDK_PATH" \
@@ -52,10 +52,10 @@ echo "[3/4] Compiling native macOS app (CoolCurve)..."
   -L "$BUILD_DIR" -lCSMCKit \
   -framework AppKit -framework SwiftUI -framework IOKit -framework CoreFoundation -framework ServiceManagement \
   "$ROOT_DIR/Sources/SMCKit/SMCClient.swift" \
-  "$ROOT_DIR"/Sources/CoolCurve/**/*.swift(.N) \
-  -o "$APP_BUNDLE/Contents/MacOS/CoolCurve"
+  "$ROOT_DIR"/Sources/Fanline/**/*.swift(.N) \
+  -o "$APP_BUNDLE/Contents/MacOS/Fanline"
 
-echo "[4/4] Writing Info.plist & resources for CoolCurve.app..."
+echo "[4/4] Writing Info.plist & resources for Fanline.app..."
 ICON_FILE="$ROOT_DIR/Resources/AppIcon.icns"
 if [[ ! -f "$ICON_FILE" ]]; then
   "${SWIFTC%c}" -sdk "$SDK_PATH" -module-cache-path "$MODULE_CACHE" "$ROOT_DIR/scripts/generate_icon.swift" "$ICON_FILE"
@@ -70,17 +70,17 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<EOF
     <key>CFBundleDevelopmentRegion</key>
     <string>zh_CN</string>
     <key>CFBundleDisplayName</key>
-    <string>CoolCurve</string>
+    <string>Fanline</string>
     <key>CFBundleExecutable</key>
-    <string>CoolCurve</string>
+    <string>Fanline</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
-    <string>com.fiveamai.CoolCurve</string>
+    <string>com.fiveamai.Fanline</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>CoolCurve</string>
+    <string>Fanline</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -97,7 +97,7 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<EOF
 </plist>
 EOF
 
-chmod +x "$APP_BUNDLE/Contents/MacOS/CoolCurve" "$APP_BUNDLE/Contents/MacOS/mm-smc-helper"
+chmod +x "$APP_BUNDLE/Contents/MacOS/Fanline" "$APP_BUNDLE/Contents/MacOS/mm-smc-helper"
 touch "$APP_BUNDLE"
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 if [[ -x "$LSREGISTER" ]]; then

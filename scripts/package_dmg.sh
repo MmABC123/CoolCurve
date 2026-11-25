@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="${0:A:h:h}"
 VERSION="${1:-1.0.0}"
-APP_NAME="CoolCurve"
+APP_NAME="Fanline"
 APP_BUNDLE="$ROOT_DIR/$APP_NAME.app"
 DIST_DIR="$ROOT_DIR/dist"
 STAGE_DIR="$ROOT_DIR/.build/dmg-stage"

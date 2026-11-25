@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="Resources/AppIcon.svg" width="96" alt="CoolCurve icon">
+  <img src="Resources/AppIcon.svg" width="96" alt="Fanline icon">
 </p>
 
-<h1 align="center">CoolCurve</h1>
+<h1 align="center">Fanline</h1>
 
 <p align="center">
   <b>画出你想要的风扇曲线。</b><br>
@@ -72,17 +72,17 @@
 
 现在 AI 编程助手已经能替你读代码、改代码、跑测试，你不必再将就别人定好的预设。**这个项目想发出一个倡议：设计你自己真正想要的曲线和模式。**
 
-CoolCurve 自己的模式就是这么来的：我们读出测试机上全部的温度传感器，一边满载一边记录，找出哪些传感器代表芯片、哪些代表机内、哪些代表机身，再根据这些数据定出冷静和清凉两条曲线。你也可以这样做：
+Fanline 自己的模式就是这么来的：我们读出测试机上全部的温度传感器，一边满载一边记录，找出哪些传感器代表芯片、哪些代表机内、哪些代表机身，再根据这些数据定出冷静和清凉两条曲线。你也可以这样做：
 
-1. **看清你的传感器**：编译后运行 `./CoolCurve.app/Contents/MacOS/mm-smc-helper status`，再让 AI 把你这台 Mac 上所有温度传感器都读出来，判断哪些有用。
+1. **看清你的传感器**：编译后运行 `./Fanline.app/Contents/MacOS/mm-smc-helper status`，再让 AI 把你这台 Mac 上所有温度传感器都读出来，判断哪些有用。
 2. **说清你在乎什么**：安静、掌托凉、放腿上不烫、不降频、续航……用大白话说就行。
 3. **实测**：让 AI 跑一段负载测试（比如满载 10 分钟），同时记录风扇转速和各处温度，然后对比。
-4. **调曲线**：每个模式都是 [`FanCurveControllers.swift`](Sources/CoolCurve/Services/FanCurveControllers.swift) 里的一个 `ChassisFanProfile`：曲线上的点、最低转速、静音上限、升降速快慢。改这些参数、加一个你自己的模式，或者干脆写一个新的控制器。
+4. **调曲线**：每个模式都是 [`FanCurveControllers.swift`](Sources/Fanline/Services/FanCurveControllers.swift) 里的一个 `ChassisFanProfile`：曲线上的点、最低转速、静音上限、升降速快慢。改这些参数、加一个你自己的模式，或者干脆写一个新的控制器。
 5. **看效果**：App 里的曲线图就是用这些参数画的，实时圆点会告诉你风扇有没有照着你的曲线走。
 
 可以从这样一段话开始：
 
-> 这是 CoolCurve，一个 Apple Silicon Mac 的风扇控制 App。我的电脑是 *[机型]*，我想要 *[你在乎的事]*。请先读代码，列出我这台 Mac 上的温度传感器，跑一个 10 分钟的负载测试并记录风扇转速和温度，然后为我设计一个新的风扇模式。保留两个模式共用的高温压制和 95°C 安全兜底。
+> 这是 Fanline，一个 Apple Silicon Mac 的风扇控制 App。我的电脑是 *[机型]*，我想要 *[你在乎的事]*。请先读代码，列出我这台 Mac 上的温度传感器，跑一个 10 分钟的负载测试并记录风扇转速和温度，然后为我设计一个新的风扇模式。保留两个模式共用的高温压制和 95°C 安全兜底。
 
 不管怎么改，请保留安全兜底：共用的高温压制、95°C 兜底，以及退出时把风扇交还 macOS。
 
@@ -92,7 +92,7 @@ CoolCurve 自己的模式就是这么来的：我们读出测试机上全部的�
 
 ```bash
 zsh scripts/build_app.sh
-open CoolCurve.app
+open Fanline.app
 ```
 
 首次开启风扇控制时，点击「解锁风扇控制」输入一次管理员密码。App 会将 `mm-smc-helper` 安装到 `/Library/PrivilegedHelperTools/`（setuid root），之后所有 SMC 写入均通过该辅助工具完成。
@@ -100,13 +100,13 @@ open CoolCurve.app
 命令行查看传感器与风扇状态：
 
 ```bash
-./CoolCurve.app/Contents/MacOS/mm-smc-helper status
+./Fanline.app/Contents/MacOS/mm-smc-helper status
 ```
 
 用实时读数重新生成 README 里的图片（中/英、深/浅色的弹窗和主窗口，以及模式曲线）。不会碰风扇，也不会改你的设置；最后的数字是先收集多少秒的历史数据：
 
 ```bash
-./CoolCurve.app/Contents/MacOS/CoolCurve --snapshot docs/images 300
+./Fanline.app/Contents/MacOS/Fanline --snapshot docs/images 300
 ```
 
 ## 打包 DMG（给自己的电脑用）
@@ -115,10 +115,10 @@ open CoolCurve.app
 zsh scripts/package_dmg.sh 1.0.0
 ```
 
-产物会输出到 `dist/CoolCurve-1.0.0-arm64.dmg`，并打印 SHA-256 校验值。没有 Apple 开发者签名和公证时，在另一台 Mac 上首次打开会被系统拦下，需要先执行：
+产物会输出到 `dist/Fanline-1.0.0-arm64.dmg`，并打印 SHA-256 校验值。没有 Apple 开发者签名和公证时，在另一台 Mac 上首次打开会被系统拦下，需要先执行：
 
 ```bash
-xattr -cr /Applications/CoolCurve.app
+xattr -cr /Applications/Fanline.app
 ```
 
 ---
@@ -135,7 +135,7 @@ Sources/
 ├── CSMCKit/                 C：AppleSMC 读写 + IOHID 温度传感器
 ├── SMCKit/                  Swift：SMCClient，温度快照、功耗与风扇控制
 ├── mm-smc-helper/           root 辅助命令行：status / auto / set / ratio
-└── CoolCurve/               菜单栏与主窗口 App
+└── Fanline/                 菜单栏与主窗口 App
     ├── main.swift           状态栏图标、弹窗与主窗口生命周期
     ├── MenuBarReadout.swift 菜单栏显示项、文字格式与固定宽度
     ├── AppState.swift       采样循环、风扇策略、安全兜底、偏好持久化
@@ -146,7 +146,7 @@ Sources/
     └── Views/               MenuBarPopoverView、MainWindowView、Components、
                              FanCurveChart、MenuBarSettingsSection、MmDesignSystem
 scripts/
-├── build_app.sh             原生编译并生成 CoolCurve.app
+├── build_app.sh             原生编译并生成 Fanline.app
 ├── generate_icon.swift      生成全尺寸 AppIcon.icns
 └── package_dmg.sh           一键打包 DMG
 ```

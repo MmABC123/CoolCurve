@@ -75,7 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
-            window.title = "CoolCurve"
+            window.title = "Fanline"
             window.isMovableByWindowBackground = true
             window.isReleasedWhenClosed = false
             window.delegate = self
@@ -158,7 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 let app = NSApplication.shared
 let arguments = CommandLine.arguments
 if let index = arguments.firstIndex(of: "--snapshot"), index + 1 < arguments.count {
-    // Developer tool: `CoolCurve --snapshot <dir> [secondsOfHistory]` renders README images and exits.
+    // Developer tool: `Fanline --snapshot <dir> [secondsOfHistory]` renders README images and exits.
     let directory = URL(fileURLWithPath: arguments[index + 1])
     let delay = (index + 2 < arguments.count ? Double(arguments[index + 2]) : nil) ?? 0
     app.setActivationPolicy(.prohibited)

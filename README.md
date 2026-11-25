@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="Resources/AppIcon.svg" width="96" alt="CoolCurve icon">
+  <img src="Resources/AppIcon.svg" width="96" alt="Fanline icon">
 </p>
 
-<h1 align="center">CoolCurve</h1>
+<h1 align="center">Fanline</h1>
 
 <p align="center">
   <b>Draw how your Mac's fan should behave.</b><br>
@@ -72,17 +72,17 @@ How a fan should behave is personal. One person wants silence and doesn't mind a
 
 Now that an AI coding assistant can read, change, and test code for you, you don't have to settle for someone else's presets. **This project is an invitation: design the curve and the modes you actually want.**
 
-That's how CoolCurve's own modes came about. We read every temperature sensor on the test Mac, ran full-load tests while logging them, found which sensors track the chip, the interior, and the case, and shaped the Cool and Chill curves from that data. You can do the same:
+That's how Fanline's own modes came about. We read every temperature sensor on the test Mac, ran full-load tests while logging them, found which sensors track the chip, the interior, and the case, and shaped the Cool and Chill curves from that data. You can do the same:
 
-1. **Look at your sensors**: build the app, then run `./CoolCurve.app/Contents/MacOS/mm-smc-helper status`. Ask your assistant to dump every temperature key on your Mac and work out which ones matter.
+1. **Look at your sensors**: build the app, then run `./Fanline.app/Contents/MacOS/mm-smc-helper status`. Ask your assistant to dump every temperature key on your Mac and work out which ones matter.
 2. **Say what you care about**: quiet, a cool palm rest, a cool lap, no throttling, battery life… in plain words.
 3. **Measure**: have the assistant run a load test (for example 10 minutes of full CPU load) while logging fan speed and temperatures, then compare.
-4. **Shape it**: each mode is a `ChassisFanProfile` in [`FanCurveControllers.swift`](Sources/CoolCurve/Services/FanCurveControllers.swift): the curve points, the floor, the quiet cap, how fast it ramps up and down. Change them, add a profile of your own, or write a new controller.
+4. **Shape it**: each mode is a `ChassisFanProfile` in [`FanCurveControllers.swift`](Sources/Fanline/Services/FanCurveControllers.swift): the curve points, the floor, the quiet cap, how fast it ramps up and down. Change them, add a profile of your own, or write a new controller.
 5. **Watch it**: the chart in the app is drawn from those same profiles, and the live dot shows the fan following (or not following) your curve.
 
 A prompt to start with:
 
-> This is CoolCurve, a fan control app for Apple Silicon Macs. My Mac is a *[model]*. I want *[what you care about]*. Read the code, list the temperature sensors on my Mac, run a 10-minute load test logging fan speed and temperatures, and propose a new fan mode for me. Keep the shared high-temperature layer and the 95°C safety fallback.
+> This is Fanline, a fan control app for Apple Silicon Macs. My Mac is a *[model]*. I want *[what you care about]*. Read the code, list the temperature sensors on my Mac, run a 10-minute load test logging fan speed and temperatures, and propose a new fan mode for me. Keep the shared high-temperature layer and the 95°C safety fallback.
 
 Whatever you change, keep the safety nets: the shared high-temperature layer, the 95°C fallback, and handing the fan back to macOS on quit.
 
@@ -92,7 +92,7 @@ Whatever you change, keep the safety nets: the shared high-temperature layer, th
 
 ```bash
 zsh scripts/build_app.sh
-open CoolCurve.app
+open Fanline.app
 ```
 
 The first time you enable fan control, click "Unlock fan control" and enter your administrator password once. The app installs `mm-smc-helper` into `/Library/PrivilegedHelperTools/` (setuid root), and all SMC writes go through it from then on.
@@ -100,13 +100,13 @@ The first time you enable fan control, click "Unlock fan control" and enter your
 Check sensors and fans from the command line:
 
 ```bash
-./CoolCurve.app/Contents/MacOS/mm-smc-helper status
+./Fanline.app/Contents/MacOS/mm-smc-helper status
 ```
 
 Regenerate the README images (popover and window in English/Chinese, light/dark, plus the mode curves) from live readings. It never touches the fan or your settings; the number is how many seconds of history to collect first:
 
 ```bash
-./CoolCurve.app/Contents/MacOS/CoolCurve --snapshot docs/images 300
+./Fanline.app/Contents/MacOS/Fanline --snapshot docs/images 300
 ```
 
 ## Package a DMG (for your own machines)
@@ -115,10 +115,10 @@ Regenerate the README images (popover and window in English/Chinese, light/dark,
 zsh scripts/package_dmg.sh 1.0.0
 ```
 
-The output lands in `dist/CoolCurve-1.0.0-arm64.dmg` with its SHA-256 printed. Without Apple Developer signing and notarization, macOS will refuse to open it on another Mac until you run:
+The output lands in `dist/Fanline-1.0.0-arm64.dmg` with its SHA-256 printed. Without Apple Developer signing and notarization, macOS will refuse to open it on another Mac until you run:
 
 ```bash
-xattr -cr /Applications/CoolCurve.app
+xattr -cr /Applications/Fanline.app
 ```
 
 ---
@@ -135,7 +135,7 @@ Sources/
 ├── CSMCKit/                 C: AppleSMC read/write + IOHID temperature sensors
 ├── SMCKit/                  Swift: SMCClient — thermal snapshot, power, fan control
 ├── mm-smc-helper/           Root helper CLI: status / auto / set / ratio
-└── CoolCurve/               Menu bar app and main window
+└── Fanline/                 Menu bar app and main window
     ├── main.swift           Status item, popover and window lifecycle
     ├── MenuBarReadout.swift Menu bar items, text formatting and fixed width
     ├── AppState.swift       Sampling loop, fan modes, safety nets, preferences
@@ -146,7 +146,7 @@ Sources/
     └── Views/               MenuBarPopoverView, MainWindowView, Components,
                              FanCurveChart, MenuBarSettingsSection, MmDesignSystem
 scripts/
-├── build_app.sh             Native build that produces CoolCurve.app
+├── build_app.sh             Native build that produces Fanline.app
 ├── generate_icon.swift      Generates the full-size AppIcon.icns
 └── package_dmg.sh           Packages a DMG
 ```

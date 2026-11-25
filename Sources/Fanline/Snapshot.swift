@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Developer tool behind `CoolCurve --snapshot <dir> [secondsOfHistory]`: renders the popover and the main
+/// Developer tool behind `Fanline --snapshot <dir> [secondsOfHistory]`: renders the popover and the main
 /// window to PNG (English/Chinese × light/dark, 2×) from live readings, and the four mode curves to SVG,
 /// for the README. Runs with `AppState.isSnapshotMode`, so it never touches the fans or saved preferences.
 @MainActor

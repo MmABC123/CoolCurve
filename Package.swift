@@ -2,14 +2,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "CoolCurve",
+    name: "Fanline",
     platforms: [
         .macOS(.v14)
     ],
     products: [
         .library(name: "SMCKit", targets: ["SMCKit"]),
         .executable(name: "mm-smc-helper", targets: ["mm-smc-helper"]),
-        .executable(name: "CoolCurve", targets: ["CoolCurve"])
+        .executable(name: "Fanline", targets: ["Fanline"])
     ],
     targets: [
         .target(
@@ -33,7 +33,7 @@ let package = Package(
             dependencies: ["SMCKit"]
         ),
         .executableTarget(
-            name: "CoolCurve",
+            name: "Fanline",
             dependencies: ["SMCKit", "CSMCKit"],
             linkerSettings: [
                 .linkedFramework("AppKit"),

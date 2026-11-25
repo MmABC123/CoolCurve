@@ -47,6 +47,18 @@ public final class AppState: ObservableObject {
         static let menuBarDensity = "menuBarDensity"
         static let menuBarItems = "menuBarItems"
         static let preferredCurveMode = "preferredCurveMode"
+        static let migratedFromCoolCurve = "migratedFromCoolCurve"
+    }
+
+    /// The app was called CoolCurve (bundle id com.fiveamai.CoolCurve) before it became Fanline.
+    /// Carries those saved settings over once; anything already set under the new name wins.
+    private static func migrateFromCoolCurve(_ defaults: UserDefaults) {
+        guard !defaults.bool(forKey: DefaultsKey.migratedFromCoolCurve),
+              let old = defaults.persistentDomain(forName: "com.fiveamai.CoolCurve") else { return }
+        for (key, value) in old where defaults.object(forKey: key) == nil {
+            defaults.set(value, forKey: key)
+        }
+        defaults.set(true, forKey: DefaultsKey.migratedFromCoolCurve)
     }
 
     // MARK: Telemetry
@@ -121,6 +133,7 @@ public final class AppState: ObservableObject {
 
     private init() {
         let defaults = UserDefaults.standard
+        if !Self.isSnapshotMode { Self.migrateFromCoolCurve(defaults) }
         language = defaults.string(forKey: DefaultsKey.language).flatMap(AppLanguage.init) ?? .systemDefault
         isWindowPinned = defaults.bool(forKey: DefaultsKey.windowPinned)
         if let saved = defaults.stringArray(forKey: DefaultsKey.menuBarItems) {
